@@ -1,4 +1,4 @@
-#!/Users/jcodd/Desktop/bolt-hackathon/vibetrip/vibetrip/venv/bin/python
+#!/Users/jcodd/Desktop/Untitled/bolt-hackathon-vibetrip/venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
