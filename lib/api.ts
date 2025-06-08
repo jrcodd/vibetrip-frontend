@@ -179,6 +179,19 @@ class ApiClient {
     return this.request<{ feed: Post[] }>(`/v1/feed?limit=${limit}&offset=${offset}`);
   }
 
+  // Health check method
+  async healthCheck(): Promise<{ status: string; message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`);
+      if (!response.ok) {
+        throw new Error(`Health check failed: ${response.status}`);
+      }
+      return response.json();
+    } catch (error: any) {
+      throw new Error(`Backend connection failed: ${error.message}`);
+    }
+  }
+
   // Follow methods
   async followUser(userId: string): Promise<{ message: string; following: boolean }> {
     return this.request<{ message: string; following: boolean }>(`/v1/users/${userId}/follow`, {
@@ -203,13 +216,13 @@ class ApiClient {
   // Events methods
   async getNearbyEvents(latitude: number, longitude: number, radius?: number): Promise<{ events: Event[] }> {
     const params = new URLSearchParams({
-      lat: latitude.toString(),
-      lon: longitude.toString(),
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
     });
     if (radius) {
-      params.append('radius', radius.toString());
+      params.append('distance_km', radius.toString());
     }
-    return this.request<{ events: Event[] }>(`/v1/events/nearby?${params.toString()}`);
+    return this.request<Event[]>(`/api/v1/events?${params.toString()}`);
   }
 
   async rsvpToEvent(eventId: string, status: 'going' | 'interested' | 'not_going'): Promise<{ message: string; rsvp: any }> {

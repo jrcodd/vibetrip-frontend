@@ -245,8 +245,8 @@ export default function EventsScreen() {
       const result = await apiClient.getNearbyEvents(location.latitude, location.longitude);
       
       if (result) {
-        setEvents(result.events);
-        setFilteredEvents(selectedCategory === 'all' ? result.events : result.events.filter(event => event.category === selectedCategory));
+        setEvents(result);
+        setFilteredEvents(selectedCategory === 'all' ? result : result.filter(event => event.category === selectedCategory));
       }
     } catch (error) {
       console.error('Error loading events:', error);

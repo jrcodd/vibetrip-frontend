@@ -11,6 +11,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider } from '@/components/AuthProvider';
+import { apiClient } from '@/lib/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,6 +30,19 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      try {
+        const result = await apiClient.healthCheck();
+        console.log('✅ Backend health check passed:', result);
+      } catch (error) {
+        console.error('❌ Backend health check failed:', error);
+      }
+    };
+
+    checkBackendHealth();
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;
