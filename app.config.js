@@ -15,9 +15,15 @@ export default {
             supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
             supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
         },
-        scheme: "vibetrip",
-        plugins: [
-            "expo-router"
-        ]
+        {
+    "android": {
+        "package": "com.coddyfish.vibetrip"
     }
+},
+scheme: "vibetrip",
+    plugins: [
+        "expo-router"
+    ]
+    }
+
 }
