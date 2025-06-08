@@ -218,10 +218,19 @@ class ApiClient {
   }
 
   async rsvpToEvent(eventId: string, status: 'going' | 'interested' | 'not_going'): Promise<{ message: string; rsvp: any }> {
-    return this.request<{ message: string; rsvp: any }>(`/api/events/${eventId}/rsvp`, {
-      method: 'POST',
-      body: JSON.stringify({ status }),
-    });
+    // First try the test endpoint to see if it works
+    try {
+      console.log('Trying RSVP with data:', { eventId, status });
+      const result = await this.request<{ message: string; rsvp: any }>(`/api/events/${eventId}/rsvp`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      });
+      console.log('RSVP successful:', result);
+      return result;
+    } catch (error) {
+      console.error('RSVP failed:', error);
+      throw error;
+    }
   }
 
 }
