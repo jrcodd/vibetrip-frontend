@@ -63,16 +63,25 @@ export function useAuthProvider() {
 
   const loadProfile = async (userId: string) => {
     try {
+      // Add a small delay to ensure session is properly set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Check if we have a valid session first
       const isAuth = await apiClient.isAuthenticated();
       if (isAuth) {
-        const profileData = await apiClient.getProfile();
-        setProfile(profileData);
+        try {
+          const profileData = await apiClient.getProfile();
+          setProfile(profileData);
+        } catch (profileError: any) {
+          console.log('Profile not found, this is normal for new users:', profileError.message);
+          // For new users, profile might not exist yet - this is ok
+          setProfile(null);
+        }
       } else {
         setProfile(null);
       }
     } catch (error) {
-      console.log('No profile found or error loading profile:', error);
+      console.log('Error in loadProfile:', error);
       setProfile(null);
     } finally {
       setLoading(false);

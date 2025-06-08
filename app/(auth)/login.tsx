@@ -81,7 +81,7 @@ export default function LoginScreen() {
                 style={styles.eyeButton}
               >
                 {showPassword ? (
-                  <EyeOff color="#8E8E93\" size={20} strokeWidth={2} />
+                  <EyeOff color="#8E8E93" size={20} strokeWidth={2} />
                 ) : (
                   <Eye color="#8E8E93" size={20} strokeWidth={2} />
                 )}

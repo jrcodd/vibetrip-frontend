@@ -178,6 +178,7 @@ class ApiClient {
   async getFeed(limit = 20, offset = 0): Promise<{ feed: Post[] }> {
     return this.request<{ feed: Post[] }>(`/api/feed?limit=${limit}&offset=${offset}`);
   }
+
 }
 
 export const apiClient = new ApiClient();

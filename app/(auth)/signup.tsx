@@ -52,22 +52,9 @@ export default function SignUpScreen() {
       });
 
       if (user) {
-        // Create profile in our database
-        try {
-          await apiClient.createProfile({
-            username,
-            full_name: fullName,
-            bio: '',
-            interests: [],
-          });
-        } catch (profileError: any) {
-          console.log('Profile creation error:', profileError);
-          // Continue anyway - profile can be created later
-        }
-
         Alert.alert(
           'Success',
-          'Account created successfully! You can now sign in.',
+          'Account created successfully! Please check your email to verify your account.',
           [
             {
               text: 'OK',
@@ -152,9 +139,9 @@ export default function SignUpScreen() {
                   style={styles.eyeButton}
                 >
                   {showPassword ? (
-                    <EyeOff color="#8E8E93\" size={20} strokeWidth={2} />
+                    <EyeOff color="#8E8E93" size={20} strokeWidth={2} />
                   ) : (
-                    <Eye color="#8E8E93\" size={20} strokeWidth={2} />
+                    <Eye color="#8E8E93" size={20} strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -175,9 +162,9 @@ export default function SignUpScreen() {
                   style={styles.eyeButton}
                 >
                   {showConfirmPassword ? (
-                    <EyeOff color="#8E8E93\" size={20} strokeWidth={2} />
+                    <EyeOff color="#8E8E93" size={20} strokeWidth={2} />
                   ) : (
-                    <Eye color="#8E8E93\" size={20} strokeWidth={2} />
+                    <Eye color="#8E8E93" size={20} strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
