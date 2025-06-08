@@ -215,18 +215,15 @@ class ApiClient {
 
   // Events methods
   async getNearbyEvents(latitude: number, longitude: number, radius?: number): Promise<{ events: Event[] }> {
-    const params = new URLSearchParams({
-      latitude: latitude.toString(),
-      longitude: longitude.toString(),
-    });
+    const params = new URLSearchParams();
     if (radius) {
-      params.append('distance_km', radius.toString());
+      params.append('category', 'all');
     }
-    return this.request<Event[]>(`/api/v1/events?${params.toString()}`);
+    return this.request<{ events: Event[] }>(`/api/events?${params.toString()}`);
   }
 
   async rsvpToEvent(eventId: string, status: 'going' | 'interested' | 'not_going'): Promise<{ message: string; rsvp: any }> {
-    return this.request<{ message: string; rsvp: any }>(`/v1/events/${eventId}/rsvp`, {
+    return this.request<{ message: string; rsvp: any }>(`/api/events/${eventId}/rsvp`, {
       method: 'POST',
       body: JSON.stringify({ status }),
     });
