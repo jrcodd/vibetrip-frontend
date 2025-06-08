@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 import type { Profile } from '@/lib/supabase';
@@ -30,6 +30,7 @@ export function useAuthProvider() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const creatingProfile = useRef(false);
 
   useEffect(() => {
     // Get initial session
@@ -73,9 +74,73 @@ export function useAuthProvider() {
           const profileData = await apiClient.getProfile();
           setProfile(profileData);
         } catch (profileError: any) {
-          console.log('Profile not found, this is normal for new users:', profileError.message);
-          // For new users, profile might not exist yet - this is ok
-          setProfile(null);
+          console.log('Profile not found, attempting to create one:', profileError.message);
+          
+          // Check if it's a 404 error or 400 with empty detail (profile not found) and only then create profile
+          if (profileError.message.includes('404') || 
+              profileError.message.includes('Profile not found') ||
+              (profileError.message.includes('400') && profileError.message.includes('{"detail":""}'))  ) {
+            
+            // Prevent concurrent profile creation attempts
+            if (creatingProfile.current) {
+              console.log('Profile creation already in progress, skipping...');
+              setProfile(null);
+              return;
+            }
+            
+            try {
+              creatingProfile.current = true;
+              console.log('Creating new profile for user...');
+              
+              // Get current user data from session
+              const { data: { session } } = await supabase.auth.getSession();
+              const currentUser = session?.user;
+              
+              if (!currentUser) {
+                throw new Error('No user session found');
+              }
+              
+              // Use email as username and get full_name from user metadata
+              const email = currentUser.email || '';
+              const username = email.split('@')[0] || `user_${Date.now()}`;
+              const fullName = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
+              
+              const newProfile = await apiClient.createProfile({
+                username: username,
+                full_name: fullName,
+                bio: '',
+                avatar_url: currentUser.user_metadata?.avatar_url || '',
+                location: '',
+                travel_style: '',
+                interests: []
+              });
+              setProfile(newProfile.profile);
+              console.log('Profile created successfully');
+            } catch (createError: any) {
+              console.error('Failed to create profile:', createError.message);
+              
+              // If profile already exists (duplicate key error), try to fetch it
+              if (createError.message.includes('already exists') || createError.message.includes('23505')) {
+                console.log('Profile already exists, attempting to fetch it...');
+                try {
+                  const existingProfile = await apiClient.getProfile();
+                  setProfile(existingProfile);
+                  console.log('Successfully fetched existing profile');
+                } catch (fetchError) {
+                  console.error('Failed to fetch existing profile:', fetchError);
+                  setProfile(null);
+                }
+              } else {
+                setProfile(null);
+              }
+            } finally {
+              creatingProfile.current = false;
+            }
+          } else {
+            // For other errors (like 400 - profile already exists), just log and continue
+            console.log('Profile error (not creating):', profileError.message);
+            setProfile(null);
+          }
         }
       } else {
         setProfile(null);
