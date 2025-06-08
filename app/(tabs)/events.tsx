@@ -24,6 +24,7 @@ import {
   Filter,
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import { router } from 'expo-router';
 import { apiClient } from '../../lib/api';
 import type { Event } from '../../lib/supabase';
 
@@ -352,7 +353,7 @@ export default function EventsScreen() {
           <TouchableOpacity style={styles.filterButton}>
             <Filter color="#007AFF" size={20} strokeWidth={2} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/create-event')}>
             <Plus color="#FFFFFF" size={20} strokeWidth={2} />
           </TouchableOpacity>
         </View>

@@ -174,6 +174,83 @@ class ApiClient {
     return this.request<{ feed: Post[] }>(`/v1/feed?limit=${limit}&offset=${offset}`);
   }
 
+  // Image upload method
+  async uploadImage(imageUri: string): Promise<{ url: string }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // Convert image URI to blob for upload with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      try {
+        const response = await fetch(imageUri, { 
+          signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+        
+        const blob = await response.blob();
+        
+        // Check file size (limit to 5MB on frontend)
+        if (blob.size > 5 * 1024 * 1024) {
+          throw new Error('File too large. Please select a smaller image (max 5MB)');
+        }
+        
+        // Generate a filename
+        const filename = `image_${Date.now()}.jpg`;
+        
+        // Append file to FormData
+        formData.append('file', blob as any, filename);
+        
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Image processing timed out. Please try a smaller image.');
+        }
+        throw new Error(`Failed to process image: ${fetchError.message}`);
+      }
+      
+      // Upload with timeout
+      const uploadController = new AbortController();
+      const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000); // 60 second timeout
+      
+      try {
+        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload-image`, {
+          method: 'POST',
+          headers: {
+            'Authorization': headers.Authorization,
+          },
+          body: formData,
+          signal: uploadController.signal,
+        });
+
+        clearTimeout(uploadTimeoutId);
+
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.text();
+          throw new Error(`Upload failed: ${uploadResponse.status} - ${error}`);
+        }
+
+        const result = await uploadResponse.json();
+        return { url: result.url };
+        
+      } catch (uploadError: any) {
+        clearTimeout(uploadTimeoutId);
+        if (uploadError.name === 'AbortError') {
+          throw new Error('Upload timed out. Please try again with a smaller image.');
+        }
+        throw uploadError;
+      }
+      
+    } catch (error: any) {
+      console.error('Image upload error:', error);
+      throw new Error(`Image upload failed: ${error.message}`);
+    }
+  }
+
   // Health check method
   async healthCheck(): Promise<{ status: string; message: string }> {
     try {
