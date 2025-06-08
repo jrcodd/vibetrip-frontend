@@ -182,46 +182,61 @@ class ApiClient {
       // Create FormData for file upload
       const formData = new FormData();
       
-      // Convert image URI to blob for upload with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      try {
-        const response = await fetch(imageUri, { 
-          signal: controller.signal 
-        });
-        clearTimeout(timeoutId);
-        
-        const blob = await response.blob();
-        
-        // Check file size (limit to 5MB on frontend)
-        if (blob.size > 5 * 1024 * 1024) {
-          throw new Error('File too large. Please select a smaller image (max 5MB)');
-        }
-        
-        // Generate a filename
+      // For React Native, we need to handle local file URIs differently
+      // Check if it's a local file URI (starts with file://)
+      if (imageUri.startsWith('file://')) {
+        // For local files, we need to create a file object directly
         const filename = `image_${Date.now()}.jpg`;
         
-        // Append file to FormData
-        formData.append('file', blob as any, filename);
+        // Create file object for React Native
+        const file = {
+          uri: imageUri,
+          type: 'image/jpeg',
+          name: filename,
+        } as any;
         
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Image processing timed out. Please try a smaller image.');
+        formData.append('file', file);
+        
+      } else {
+        // For remote URLs, fetch and convert to blob
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        try {
+          const response = await fetch(imageUri, { 
+            signal: controller.signal 
+          });
+          clearTimeout(timeoutId);
+          
+          const blob = await response.blob();
+          
+          // Check file size (limit to 5MB on frontend)
+          if (blob.size > 5 * 1024 * 1024) {
+            throw new Error('File too large. Please select a smaller image (max 5MB)');
+          }
+          
+          const filename = `image_${Date.now()}.jpg`;
+          formData.append('file', blob as any, filename);
+          
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Image processing timed out. Please try a smaller image.');
+          }
+          throw new Error(`Failed to process image: ${fetchError.message}`);
         }
-        throw new Error(`Failed to process image: ${fetchError.message}`);
       }
       
       // Upload with timeout
       const uploadController = new AbortController();
-      const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000); // 60 second timeout
+      const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000);
       
       try {
         const uploadResponse = await fetch(`${API_BASE_URL}/api/upload-image`, {
           method: 'POST',
           headers: {
             'Authorization': headers.Authorization,
+            // Don't set Content-Type for FormData, let the browser set it with boundary
           },
           body: formData,
           signal: uploadController.signal,

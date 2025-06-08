@@ -71,50 +71,114 @@ export default function CreateEventScreen() {
 
   const pickImage = async () => {
     try {
+      console.log('Requesting media library permissions...');
+      
+      // Request permissions first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('Permission status:', status);
+      
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant camera roll permissions to upload images.');
+        Alert.alert(
+          'Permission Required', 
+          'Please grant camera roll permissions to upload images. You can enable this in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              // For iOS, we can't directly open settings, but we can show instructions
+              Alert.alert(
+                'Enable Photo Access', 
+                'Go to Settings > Privacy & Security > Photos > [Your App Name] and allow access.'
+              );
+            }}
+          ]
+        );
         return;
       }
 
+      console.log('Launching image library...');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
+        exif: false, // Don't include EXIF data to reduce file size
       });
 
-      if (!result.canceled && result.assets[0]) {
-        setSelectedImage(result.assets[0].uri);
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const selectedAsset = result.assets[0];
+        console.log('Selected image:', selectedAsset.uri);
+        setSelectedImage(selectedAsset.uri);
+        
+        // Update form data with the image URI
+        setFormData(prev => ({
+          ...prev,
+          image_url: selectedAsset.uri
+        }));
+      } else {
+        console.log('Image selection was canceled or no assets found');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    } catch (error: any) {
+      console.error('Error picking image:', error);
+      Alert.alert(
+        'Image Selection Failed', 
+        `Failed to pick image: ${error.message || 'Unknown error'}. Please try again or check your permissions.`
+      );
     }
   };
 
   const takePhoto = async () => {
     try {
+      console.log('Requesting camera permissions...');
+      
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('Camera permission status:', status);
+      
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant camera permissions to take photos.');
+        Alert.alert(
+          'Camera Permission Required', 
+          'Please grant camera permissions to take photos. You can enable this in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              Alert.alert(
+                'Enable Camera Access', 
+                'Go to Settings > Privacy & Security > Camera > [Your App Name] and allow access.'
+              );
+            }}
+          ]
+        );
         return;
       }
 
+      console.log('Launching camera...');
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
+        exif: false,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        setSelectedImage(result.assets[0].uri);
+      console.log('Camera result:', result);
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const selectedAsset = result.assets[0];
+        console.log('Photo taken:', selectedAsset.uri);
+        setSelectedImage(selectedAsset.uri);
         setFormData(prev => ({
           ...prev,
-          image_url: result.assets[0].uri
+          image_url: selectedAsset.uri
         }));
+      } else {
+        console.log('Photo capture was canceled or no assets found');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    } catch (error: any) {
+      console.error('Error taking photo:', error);
+      Alert.alert(
+        'Camera Error', 
+        `Failed to take photo: ${error.message || 'Unknown error'}. Please try again or check your permissions.`
+      );
     }
   };
 
