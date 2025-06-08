@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Image,
   Dimensions,
   FlatList,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -22,6 +24,8 @@ import {
   Filter,
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import * as Location from 'expo-location';
+import { apiClient } from '../../lib/api';
 
 const { width } = Dimensions.get('window');
 
@@ -54,108 +58,12 @@ const eventCategories = [
   { id: 'tech', name: 'Tech', color: '#5AC8FA' },
 ];
 
-const mockEvents: Event[] = [
-  {
-    id: '1',
-    title: 'Rooftop Jazz Night',
-    description: 'Experience the best jazz musicians in the city with stunning skyline views.',
-    image: 'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg?auto=compress&cs=tinysrgb&w=800',
-    date: 'March 15',
-    time: '8:00 PM',
-    location: 'Sky Lounge, Downtown',
-    category: 'music',
-    price: '$25',
-    attendees: 89,
-    maxAttendees: 120,
-    organizer: {
-      name: 'Blue Note Events',
-      avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150',
-    },
-    isGoing: false,
-    isInterested: true,
-  },
-  {
-    id: '2',
-    title: 'Street Food Festival',
-    description: 'Taste the best street food from around the world with live cooking demos.',
-    image: 'https://images.pexels.com/photos/1267320/pexels-photo-1267320.jpeg?auto=compress&cs=tinysrgb&w=800',
-    date: 'March 18',
-    time: '12:00 PM',
-    location: 'Central Park',
-    category: 'food',
-    price: 'Free',
-    attendees: 234,
-    maxAttendees: 500,
-    organizer: {
-      name: 'Foodie Collective',
-      avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150',
-    },
-    isGoing: true,
-    isInterested: false,
-  },
-  {
-    id: '3',
-    title: 'Modern Art Exhibition',
-    description: 'Discover emerging artists and their groundbreaking contemporary works.',
-    image: 'https://images.pexels.com/photos/1839919/pexels-photo-1839919.jpeg?auto=compress&cs=tinysrgb&w=800',
-    date: 'March 20',
-    time: '6:00 PM',
-    location: 'Gallery District',
-    category: 'art',
-    price: '$15',
-    attendees: 67,
-    maxAttendees: 80,
-    organizer: {
-      name: 'Modern Gallery',
-      avatar: 'https://images.pexels.com/photos/1130626/pexels-photo-1130626.jpeg?auto=compress&cs=tinysrgb&w=150',
-    },
-    isGoing: false,
-    isInterested: false,
-  },
-  {
-    id: '4',
-    title: 'Tech Startup Meetup',
-    description: 'Network with fellow entrepreneurs and learn about the latest tech trends.',
-    image: 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=800',
-    date: 'March 22',
-    time: '7:00 PM',
-    location: 'Innovation Hub',
-    category: 'tech',
-    price: 'Free',
-    attendees: 156,
-    maxAttendees: 200,
-    organizer: {
-      name: 'Tech Connect',
-      avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150',
-    },
-    isGoing: false,
-    isInterested: true,
-  },
-  {
-    id: '5',
-    title: 'Beach Volleyball Tournament',
-    description: 'Join the ultimate beach volleyball competition with prizes and refreshments.',
-    image: 'https://images.pexels.com/photos/1263317/pexels-photo-1263317.jpeg?auto=compress&cs=tinysrgb&w=800',
-    date: 'March 25',
-    time: '10:00 AM',
-    location: 'Sunset Beach',
-    category: 'sports',
-    price: '$20',
-    attendees: 45,
-    maxAttendees: 64,
-    organizer: {
-      name: 'Beach Sports Club',
-      avatar: 'https://images.pexels.com/photos/762020/pexels-photo-762020.jpeg?auto=compress&cs=tinysrgb&w=150',
-    },
-    isGoing: false,
-    isInterested: false,
-  },
-];
 
-const EventCard = ({ event, index }: { event: Event; index: number }) => {
+const EventCard = ({ event, index, onRsvpUpdate }: { event: Event; index: number; onRsvpUpdate: (eventId: string, status: string) => void }) => {
   const [isGoing, setIsGoing] = useState(event.isGoing);
   const [isInterested, setIsInterested] = useState(event.isInterested);
   const [isLiked, setIsLiked] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const getStatusColor = () => {
     if (isGoing) return '#34C759';
@@ -169,15 +77,46 @@ const EventCard = ({ event, index }: { event: Event; index: number }) => {
     return 'Not Going';
   };
 
-  const handleRSVP = () => {
+  const handleRSVP = async () => {
+    if (isUpdating) return;
+
+    setIsUpdating(true);
+    let newStatus: 'going' | 'interested' | 'not_going';
+    
     if (isGoing) {
-      setIsGoing(false);
-      setIsInterested(false);
+      newStatus = 'not_going';
     } else if (isInterested) {
+      newStatus = 'going';
+    } else {
+      newStatus = 'interested';
+    }
+
+    // Optimistic update
+    const prevGoing = isGoing;
+    const prevInterested = isInterested;
+    
+    if (newStatus === 'going') {
       setIsGoing(true);
       setIsInterested(false);
-    } else {
+    } else if (newStatus === 'interested') {
+      setIsGoing(false);
       setIsInterested(true);
+    } else {
+      setIsGoing(false);
+      setIsInterested(false);
+    }
+
+    try {
+      await apiClient.rsvpToEvent(event.id, newStatus);
+      onRsvpUpdate(event.id, newStatus);
+    } catch (error) {
+      // Revert optimistic update on error
+      setIsGoing(prevGoing);
+      setIsInterested(prevInterested);
+      Alert.alert('Error', 'Failed to update RSVP. Please try again.');
+      console.error('Error updating RSVP:', error);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -232,9 +171,13 @@ const EventCard = ({ event, index }: { event: Event; index: number }) => {
           </View>
 
           <View style={styles.eventActions}>
-            <TouchableOpacity style={styles.rsvpButton} onPress={handleRSVP}>
+            <TouchableOpacity 
+              style={[styles.rsvpButton, isUpdating && styles.rsvpButtonDisabled]} 
+              onPress={handleRSVP}
+              disabled={isUpdating}
+            >
               <Text style={styles.rsvpButtonText}>
-                {isGoing ? 'Going ✓' : isInterested ? 'Interested' : 'RSVP'}
+                {isUpdating ? 'Updating...' : isGoing ? 'Going ✓' : isInterested ? 'Interested' : 'RSVP'}
               </Text>
             </TouchableOpacity>
 
@@ -268,16 +211,110 @@ const EventCard = ({ event, index }: { event: Event; index: number }) => {
 
 export default function EventsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [filteredEvents, setFilteredEvents] = useState(mockEvents);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
     if (categoryId === 'all') {
-      setFilteredEvents(mockEvents);
+      setFilteredEvents(events);
     } else {
-      setFilteredEvents(mockEvents.filter(event => event.category === categoryId));
+      setFilteredEvents(events.filter(event => event.category === categoryId));
     }
   };
+
+  const loadNearbyEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const isAuth = await apiClient.isAuthenticated();
+      if (!isAuth) {
+        setError('Please log in to view events');
+        return;
+      }
+
+      if (!location) {
+        setError('Location not available');
+        return;
+      }
+
+      const result = await apiClient.getNearbyEvents(location.latitude, location.longitude);
+      
+      if (result) {
+        setEvents(result.events);
+        setFilteredEvents(selectedCategory === 'all' ? result.events : result.events.filter(event => event.category === selectedCategory));
+      }
+    } catch (error) {
+      console.error('Error loading events:', error);
+      setError('Failed to load events. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setError('Location permission denied. Please enable location access to see nearby events.');
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setError('Failed to get your location. Please try again.');
+    }
+  };
+
+  const handleRsvpUpdate = (eventId: string, status: string) => {
+    setEvents(prevEvents => 
+      prevEvents.map(event => 
+        event.id === eventId 
+          ? { 
+              ...event, 
+              isGoing: status === 'going',
+              isInterested: status === 'interested'
+            }
+          : event
+      )
+    );
+    
+    setFilteredEvents(prevEvents => 
+      prevEvents.map(event => 
+        event.id === eventId 
+          ? { 
+              ...event, 
+              isGoing: status === 'going',
+              isInterested: status === 'interested'
+            }
+          : event
+      )
+    );
+  };
+
+  useEffect(() => {
+    requestLocationPermission();
+  }, []);
+
+  useEffect(() => {
+    if (location) {
+      loadNearbyEvents();
+    }
+  }, [location]);
+
+  useEffect(() => {
+    handleCategorySelect(selectedCategory);
+  }, [events]);
 
   const renderCategory = ({ item }: { item: typeof eventCategories[0] }) => (
     <TouchableOpacity
@@ -351,11 +388,31 @@ export default function EventsScreen() {
             <Text style={styles.resultCount}>{filteredEvents.length} events</Text>
           </Animated.View>
 
-          <View style={styles.eventsList}>
-            {filteredEvents.map((event, index) => (
-              <EventCard key={event.id} event={event} index={index} />
-            ))}
-          </View>
+          {loading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>Finding nearby events...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centered}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={requestLocationPermission}>
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.eventsList}>
+              {filteredEvents.map((event, index) => (
+                <EventCard key={event.id} event={event} index={index} onRsvpUpdate={handleRsvpUpdate} />
+              ))}
+              {filteredEvents.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No events found in your area</Text>
+                  <Text style={styles.emptyStateSubtext}>Try selecting a different category or check back later</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -617,5 +674,55 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+  },
+  rsvpButtonDisabled: {
+    opacity: 0.6,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#8E8E93',
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1C1C1E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#8E8E93',
+    textAlign: 'center',
   },
 });

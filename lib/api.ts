@@ -176,7 +176,47 @@ class ApiClient {
 
   // Feed method
   async getFeed(limit = 20, offset = 0): Promise<{ feed: Post[] }> {
-    return this.request<{ feed: Post[] }>(`/api/feed?limit=${limit}&offset=${offset}`);
+    return this.request<{ feed: Post[] }>(`/v1/feed?limit=${limit}&offset=${offset}`);
+  }
+
+  // Follow methods
+  async followUser(userId: string): Promise<{ message: string; following: boolean }> {
+    return this.request<{ message: string; following: boolean }>(`/v1/users/${userId}/follow`, {
+      method: 'POST',
+    });
+  }
+
+  async unfollowUser(userId: string): Promise<{ message: string; following: boolean }> {
+    return this.request<{ message: string; following: boolean }>(`/v1/users/${userId}/follow`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getUserFollowers(userId: string): Promise<{ followers: Profile[] }> {
+    return this.request<{ followers: Profile[] }>(`/v1/users/${userId}/followers`);
+  }
+
+  async getUserFollowing(userId: string): Promise<{ following: Profile[] }> {
+    return this.request<{ following: Profile[] }>(`/v1/users/${userId}/following`);
+  }
+
+  // Events methods
+  async getNearbyEvents(latitude: number, longitude: number, radius?: number): Promise<{ events: Event[] }> {
+    const params = new URLSearchParams({
+      lat: latitude.toString(),
+      lon: longitude.toString(),
+    });
+    if (radius) {
+      params.append('radius', radius.toString());
+    }
+    return this.request<{ events: Event[] }>(`/v1/events/nearby?${params.toString()}`);
+  }
+
+  async rsvpToEvent(eventId: string, status: 'going' | 'interested' | 'not_going'): Promise<{ message: string; rsvp: any }> {
+    return this.request<{ message: string; rsvp: any }>(`/v1/events/${eventId}/rsvp`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
   }
 
 }

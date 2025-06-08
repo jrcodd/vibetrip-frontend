@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/api';
 
 interface FollowButtonProps {
     userId: string;
@@ -27,17 +27,12 @@ export default function FollowButton({
 
     const checkFollowStatus = async () => {
         try {
-            const { data: session } = await supabase.auth.getSession();
-            if (!session?.session) return;
+            const isAuth = await apiClient.isAuthenticated();
+            if (!isAuth) return;
 
-            const { data, error } = await supabase
-                .from('follows')
-                .select('id')
-                .eq('follower_id', session.session.user.id)
-                .eq('following_id', userId)
-                .single();
-
-            setIsFollowing(!!data);
+            // Note: The API doesn't have a direct endpoint to check follow status
+            // This would need to be implemented in the backend or we can check via followers list
+            // For now, we'll rely on the initialIsFollowing prop
         } catch (error) {
             console.error('Error checking follow status:', error);
         }
@@ -46,32 +41,27 @@ export default function FollowButton({
     const toggleFollow = async () => {
         try {
             setIsLoading(true);
-            const { data: session } = await supabase.auth.getSession();
-            if (!session?.session) return;
+            const isAuth = await apiClient.isAuthenticated();
+            if (!isAuth) return;
 
-            if (isFollowing) {
-                // Unfollow
-                const { error } = await supabase
-                    .from('follows')
-                    .delete()
-                    .eq('follower_id', session.session.user.id)
-                    .eq('following_id', userId);
+            // Optimistic update
+            const previousFollowingState = isFollowing;
+            setIsFollowing(!isFollowing);
 
-                if (error) throw error;
-                setIsFollowing(false);
-                onUnfollow?.();
-            } else {
-                // Follow
-                const { error } = await supabase
-                    .from('follows')
-                    .insert({
-                        follower_id: session.session.user.id,
-                        following_id: userId,
-                    });
-
-                if (error) throw error;
-                setIsFollowing(true);
-                onFollow?.();
+            try {
+                if (isFollowing) {
+                    // Unfollow
+                    await apiClient.unfollowUser(userId);
+                    onUnfollow?.();
+                } else {
+                    // Follow
+                    await apiClient.followUser(userId);
+                    onFollow?.();
+                }
+            } catch (apiError) {
+                // Revert optimistic update on failure
+                setIsFollowing(previousFollowingState);
+                console.error('Error toggling follow:', apiError);
             }
         } catch (error) {
             console.error('Error toggling follow:', error);

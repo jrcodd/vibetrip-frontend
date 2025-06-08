@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FlatList, Text, View, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
-import { supabase } from '../lib/supabase';
-import { subscribeToChannel, Channel, unsubscribeFromChannel } from '../lib/realtime';
+import { apiClient } from '../lib/api';
 import ActivityItem from './ActivityItem';
 
 export default function ActivityFeed() {
@@ -21,35 +20,23 @@ export default function ActivityFeed() {
                 setLoading(true);
             }
 
-            const { data: session } = await supabase.auth.getSession();
-            if (!session?.session) return;
+            const isAuth = await apiClient.isAuthenticated();
+            if (!isAuth) return;
 
-            const userId = session.session.user.id;
+            const result = await apiClient.getFeed(PAGE_SIZE, pageNum * PAGE_SIZE);
+            
+            if (result) {
+                const data = result.feed;
+                
+                if (refresh || pageNum === 0) {
+                    setActivities(data || []);
+                } else {
+                    setActivities(prev => [...prev, ...(data || [])]);
+                }
 
-            const { data, error } = await supabase
-                .from('activities')
-                .select(`
-          *,
-          actor:profiles!activities_actor_id_fkey(*),
-          posts(*),
-          events(*)
-        `)
-                .or(`user_id.eq.${userId},actor_id.eq.${userId}`)
-                .order('created_at', { ascending: false })
-                .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
-
-            if (error) {
-                throw error;
+                // Check if we have more results
+                setHasMore((data || []).length === PAGE_SIZE);
             }
-
-            if (refresh || pageNum === 0) {
-                setActivities(data || []);
-            } else {
-                setActivities(prev => [...prev, ...(data || [])]);
-            }
-
-            // Check if we have more results
-            setHasMore((data || []).length === PAGE_SIZE);
         } catch (error) {
             console.error('Error loading activities:', error);
         } finally {
@@ -58,64 +45,10 @@ export default function ActivityFeed() {
         }
     }, []);
 
-    // Subscribe to real-time updates for the activity feed
+    // Load activities on mount
     useEffect(() => {
-        let subscription;
-
-        const setupRealtime = async () => {
-            try {
-                const { data: session } = await supabase.auth.getSession();
-                if (!session?.session) return;
-
-                const userId = session.session.user.id;
-
-                subscription = subscribeToChannel(
-                    Channel.ACTIVITIES,
-                    (payload) => {
-                        if (payload.eventType === 'INSERT') {
-                            // Fetch complete activity with relations
-                            fetchActivity(payload.new.id);
-                        }
-                    },
-                    userId
-                );
-            } catch (error) {
-                console.error('Error setting up realtime:', error);
-            }
-        };
-
-        setupRealtime();
         loadActivities();
-
-        return () => {
-            if (subscription) {
-                unsubscribeFromChannel(subscription);
-            }
-        };
     }, [loadActivities]);
-
-    const fetchActivity = async (activityId) => {
-        try {
-            const { data, error } = await supabase
-                .from('activities')
-                .select(`
-          *,
-          actor:profiles!activities_actor_id_fkey(*),
-          posts(*),
-          events(*)
-        `)
-                .eq('id', activityId)
-                .single();
-
-            if (error) throw error;
-
-            if (data) {
-                setActivities(prev => [data, ...prev]);
-            }
-        } catch (error) {
-            console.error('Error fetching new activity:', error);
-        }
-    };
 
     const handleRefresh = () => {
         loadActivities(0, true);
