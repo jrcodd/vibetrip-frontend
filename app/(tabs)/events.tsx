@@ -59,7 +59,7 @@ const eventCategories = [
 ];
 
 
-const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index: number; onRsvpUpdate: (eventId: string, status: string) => void }) => {
+const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index: number; onRsvpUpdate: (eventId: string, status: string, prevStatus?: { isGoing: boolean; isInterested: boolean }) => void }) => {
   const [isGoing, setIsGoing] = useState(event.isGoing);
   const [isInterested, setIsInterested] = useState(event.isInterested);
   const [isLiked, setIsLiked] = useState(false);
@@ -107,8 +107,8 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
     }
 
     try {
-      await apiClient.rsvpEvent(event.id, newStatus);
-      onRsvpUpdate(event.id, newStatus);
+      await apiClient.rsvpToEvent(event.id, newStatus);
+      onRsvpUpdate(event.id, newStatus, { isGoing: prevGoing, isInterested: prevInterested });
     } catch (error) {
       // Revert optimistic update on error
       setIsGoing(prevGoing);
@@ -242,16 +242,21 @@ export default function EventsScreen() {
       
       if (result && result.events) {
         // Transform database events to card data format
-        const transformedEvents: EventCardData[] = result.events.map((event: Event) => {
+        const transformedEvents: EventCardData[] = result.events.map((event: any) => {
+          console.log('Event data:', JSON.stringify(event, null, 2)); // Debug log
           const eventDate = new Date(event.event_date);
           const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+          
+          // Handle joined profile data - could be nested under 'profiles' key
+          const organizerProfile = event.profiles || event.organizer_profile;
+          console.log('Organizer profile:', organizerProfile);
           
           return {
             id: event.id,
             title: event.title,
             description: event.description || '',
-            image: event.image_url || 'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg?auto=compress&cs=tinysrgb&w=800',
+            image: event.image_url && event.image_url.trim() !== '' ? event.image_url : 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
             date: dateStr,
             time: timeStr,
             location: event.location,
@@ -260,11 +265,11 @@ export default function EventsScreen() {
             attendees: event.attendees_count,
             maxAttendees: event.max_attendees,
             organizer: {
-              name: event.profiles?.full_name || event.profiles?.username || 'Unknown Organizer',
-              avatar: event.profiles?.avatar_url || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
+              name: organizerProfile?.full_name || organizerProfile?.username || 'Unknown Organizer',
+              avatar: organizerProfile?.avatar_url || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
             },
-            isGoing: false, // TODO: Get user's RSVP status
-            isInterested: false // TODO: Get user's RSVP status
+            isGoing: event.user_rsvp_status === 'going',
+            isInterested: event.user_rsvp_status === 'interested'
           };
         });
         
@@ -280,30 +285,31 @@ export default function EventsScreen() {
   };
 
 
-  const handleRsvpUpdate = (eventId: string, status: string) => {
-    setEvents(prevEvents => 
-      prevEvents.map(event => 
-        event.id === eventId 
-          ? { 
-              ...event, 
-              isGoing: status === 'going',
-              isInterested: status === 'interested'
-            }
-          : event
-      )
-    );
+  const handleRsvpUpdate = (eventId: string, status: string, prevStatus?: { isGoing: boolean; isInterested: boolean }) => {
+    const updateEvent = (event: EventCardData) => {
+      if (event.id !== eventId) return event;
+      
+      let attendeeChange = 0;
+      const wasGoing = prevStatus?.isGoing || event.isGoing;
+      const willBeGoing = status === 'going';
+      
+      // Calculate attendee count change
+      if (wasGoing && !willBeGoing) {
+        attendeeChange = -1; // Was going, now not going
+      } else if (!wasGoing && willBeGoing) {
+        attendeeChange = 1; // Wasn't going, now going
+      }
+      
+      return { 
+        ...event, 
+        isGoing: status === 'going',
+        isInterested: status === 'interested',
+        attendees: Math.max(0, event.attendees + attendeeChange)
+      };
+    };
     
-    setFilteredEvents(prevEvents => 
-      prevEvents.map(event => 
-        event.id === eventId 
-          ? { 
-              ...event, 
-              isGoing: status === 'going',
-              isInterested: status === 'interested'
-            }
-          : event
-      )
-    );
+    setEvents(prevEvents => prevEvents.map(updateEvent));
+    setFilteredEvents(prevEvents => prevEvents.map(updateEvent));
   };
 
   useEffect(() => {

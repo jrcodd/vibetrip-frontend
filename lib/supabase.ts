@@ -44,6 +44,7 @@ export interface Event {
   max_attendees?: number;
   attendees_count: number;
   organizer_id?: string;
+  organizer_username?: string;
   created_at: string;
   profiles?: Profile; // For joined data
 }

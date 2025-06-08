@@ -144,12 +144,6 @@ class ApiClient {
     return this.request<{ events: Event[] }>(`/api/events${params}`);
   }
 
-  async rsvpEvent(eventId: string, status: 'going' | 'interested' | 'not_going') {
-    return this.request<{ message: string; rsvp: any }>(`/api/events/${eventId}/rsvp`, {
-      method: 'POST',
-      body: JSON.stringify({ status }),
-    });
-  }
 
   // Connections methods
   async followUser(userId: string): Promise<{ message: string; following: boolean }> {
