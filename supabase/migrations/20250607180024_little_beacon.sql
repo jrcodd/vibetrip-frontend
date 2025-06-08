@@ -21,8 +21,20 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Drop existing tables if they exist (in correct order to handle dependencies)
+DROP TABLE IF EXISTS event_rsvps CASCADE;
+DROP TABLE IF EXISTS post_saves CASCADE;
+DROP TABLE IF EXISTS post_likes CASCADE;
+DROP TABLE IF EXISTS connections CASCADE;
+DROP TABLE IF EXISTS user_badges CASCADE;
+DROP TABLE IF EXISTS posts CASCADE;
+DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS places CASCADE;
+DROP TABLE IF EXISTS badges CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+
 -- Profiles table (extends auth.users)
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username text UNIQUE NOT NULL,
   full_name text,
@@ -39,7 +51,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 -- Places table
-CREATE TABLE IF NOT EXISTS places (
+CREATE TABLE places (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   description text,
@@ -50,17 +62,17 @@ CREATE TABLE IF NOT EXISTS places (
   image_url text,
   rating decimal DEFAULT 0,
   is_hidden boolean DEFAULT false,
-  created_by uuid REFERENCES profiles(id),
+  created_by uuid,
   created_at timestamptz DEFAULT now()
 );
 
 -- Posts table
-CREATE TABLE IF NOT EXISTS posts (
+CREATE TABLE posts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid NOT NULL,
   content text NOT NULL,
   image_url text,
-  place_id uuid REFERENCES places(id),
+  place_id uuid,
   post_type text DEFAULT 'story' CHECK (post_type IN ('story', 'recommendation', 'event', 'challenge')),
   likes_count integer DEFAULT 0,
   saves_count integer DEFAULT 0,
@@ -69,7 +81,7 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 -- Events table
-CREATE TABLE IF NOT EXISTS events (
+CREATE TABLE events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   description text,
@@ -80,12 +92,12 @@ CREATE TABLE IF NOT EXISTS events (
   price text,
   max_attendees integer,
   attendees_count integer DEFAULT 0,
-  organizer_id uuid REFERENCES profiles(id),
+  organizer_id uuid,
   created_at timestamptz DEFAULT now()
 );
 
 -- Badges table
-CREATE TABLE IF NOT EXISTS badges (
+CREATE TABLE badges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text UNIQUE NOT NULL,
   description text NOT NULL,
@@ -96,51 +108,94 @@ CREATE TABLE IF NOT EXISTS badges (
 );
 
 -- User badges junction table
-CREATE TABLE IF NOT EXISTS user_badges (
+CREATE TABLE user_badges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  badge_id uuid REFERENCES badges(id) ON DELETE CASCADE,
+  user_id uuid,
+  badge_id uuid,
   earned_at timestamptz DEFAULT now(),
   UNIQUE(user_id, badge_id)
 );
 
 -- Connections table (following/followers)
-CREATE TABLE IF NOT EXISTS connections (
+CREATE TABLE connections (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  follower_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  following_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
+  follower_id uuid,
+  following_id uuid,
   created_at timestamptz DEFAULT now(),
   UNIQUE(follower_id, following_id)
 );
 
 -- Post likes table
-CREATE TABLE IF NOT EXISTS post_likes (
+CREATE TABLE post_likes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  post_id uuid REFERENCES posts(id) ON DELETE CASCADE,
+  user_id uuid,
+  post_id uuid,
   created_at timestamptz DEFAULT now(),
   UNIQUE(user_id, post_id)
 );
 
 -- Post saves table
-CREATE TABLE IF NOT EXISTS post_saves (
+CREATE TABLE post_saves (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  post_id uuid REFERENCES posts(id) ON DELETE CASCADE,
+  user_id uuid,
+  post_id uuid,
   created_at timestamptz DEFAULT now(),
   UNIQUE(user_id, post_id)
 );
 
 -- Event RSVPs table
-CREATE TABLE IF NOT EXISTS event_rsvps (
+CREATE TABLE event_rsvps (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  event_id uuid REFERENCES events(id) ON DELETE CASCADE,
+  user_id uuid,
+  event_id uuid,
   status text DEFAULT 'interested' CHECK (status IN ('going', 'interested', 'not_going')),
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
   UNIQUE(user_id, event_id)
 );
+
+-- Add foreign key constraints after all tables are created
+ALTER TABLE places ADD CONSTRAINT fk_places_created_by 
+  FOREIGN KEY (created_by) REFERENCES profiles(id);
+
+ALTER TABLE posts ADD CONSTRAINT fk_posts_user_id 
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE posts ADD CONSTRAINT fk_posts_place_id 
+  FOREIGN KEY (place_id) REFERENCES places(id);
+
+ALTER TABLE events ADD CONSTRAINT fk_events_organizer_id 
+  FOREIGN KEY (organizer_id) REFERENCES profiles(id);
+
+ALTER TABLE user_badges ADD CONSTRAINT fk_user_badges_user_id 
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE user_badges ADD CONSTRAINT fk_user_badges_badge_id 
+  FOREIGN KEY (badge_id) REFERENCES badges(id) ON DELETE CASCADE;
+
+ALTER TABLE connections ADD CONSTRAINT fk_connections_follower_id 
+  FOREIGN KEY (follower_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE connections ADD CONSTRAINT fk_connections_following_id 
+  FOREIGN KEY (following_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE post_likes ADD CONSTRAINT fk_post_likes_user_id 
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE post_likes ADD CONSTRAINT fk_post_likes_post_id 
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+ALTER TABLE post_saves ADD CONSTRAINT fk_post_saves_user_id 
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE post_saves ADD CONSTRAINT fk_post_saves_post_id 
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+ALTER TABLE event_rsvps ADD CONSTRAINT fk_event_rsvps_user_id 
+  FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+
+ALTER TABLE event_rsvps ADD CONSTRAINT fk_event_rsvps_event_id 
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE;
 
 -- Enable Row Level Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
