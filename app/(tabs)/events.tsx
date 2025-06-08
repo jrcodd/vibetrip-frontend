@@ -24,12 +24,12 @@ import {
   Filter,
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
-import * as Location from 'expo-location';
 import { apiClient } from '../../lib/api';
+import type { Event } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-interface Event {
+interface EventCardData {
   id: string;
   title: string;
   description: string;
@@ -59,7 +59,7 @@ const eventCategories = [
 ];
 
 
-const EventCard = ({ event, index, onRsvpUpdate }: { event: Event; index: number; onRsvpUpdate: (eventId: string, status: string) => void }) => {
+const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index: number; onRsvpUpdate: (eventId: string, status: string) => void }) => {
   const [isGoing, setIsGoing] = useState(event.isGoing);
   const [isInterested, setIsInterested] = useState(event.isInterested);
   const [isLiked, setIsLiked] = useState(false);
@@ -107,7 +107,7 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: Event; index: number
     }
 
     try {
-      await apiClient.rsvpToEvent(event.id, newStatus);
+      await apiClient.rsvpEvent(event.id, newStatus);
       onRsvpUpdate(event.id, newStatus);
     } catch (error) {
       // Revert optimistic update on error
@@ -211,10 +211,9 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: Event; index: number
 
 export default function EventsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [events, setEvents] = useState<Event[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventCardData[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<EventCardData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleCategorySelect = (categoryId: string) => {
@@ -226,7 +225,7 @@ export default function EventsScreen() {
     }
   };
 
-  const loadNearbyEvents = async () => {
+  const loadEvents = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -237,16 +236,40 @@ export default function EventsScreen() {
         return;
       }
 
-      if (!location) {
-        setError('Location not available');
-        return;
-      }
-
-      const result = await apiClient.getNearbyEvents(location.latitude, location.longitude);
+      console.log('Fetching events with category:', selectedCategory === 'all' ? 'all' : selectedCategory);
+      const result = await apiClient.getEvents(selectedCategory === 'all' ? undefined : selectedCategory);
+      console.log('API result:', result);
       
-      if (result) {
-        setEvents(result.events);
-        setFilteredEvents(selectedCategory === 'all' ? result.events : result.events.filter(event => event.category === selectedCategory));
+      if (result && result.events) {
+        // Transform database events to card data format
+        const transformedEvents: EventCardData[] = result.events.map((event: Event) => {
+          const eventDate = new Date(event.event_date);
+          const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+          
+          return {
+            id: event.id,
+            title: event.title,
+            description: event.description || '',
+            image: event.image_url || 'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg?auto=compress&cs=tinysrgb&w=800',
+            date: dateStr,
+            time: timeStr,
+            location: event.location,
+            category: event.category,
+            price: event.price || 'Free',
+            attendees: event.attendees_count,
+            maxAttendees: event.max_attendees,
+            organizer: {
+              name: event.profiles?.full_name || event.profiles?.username || 'Unknown Organizer',
+              avatar: event.profiles?.avatar_url || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
+            },
+            isGoing: false, // TODO: Get user's RSVP status
+            isInterested: false // TODO: Get user's RSVP status
+          };
+        });
+        
+        setEvents(transformedEvents);
+        setFilteredEvents(transformedEvents);
       }
     } catch (error) {
       console.error('Error loading events:', error);
@@ -256,25 +279,6 @@ export default function EventsScreen() {
     }
   };
 
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        setError('Location permission denied. Please enable location access to see nearby events.');
-        return;
-      }
-
-      const currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-      });
-    } catch (error) {
-      console.error('Error getting location:', error);
-      setError('Failed to get your location. Please try again.');
-    }
-  };
 
   const handleRsvpUpdate = (eventId: string, status: string) => {
     setEvents(prevEvents => 
@@ -303,18 +307,16 @@ export default function EventsScreen() {
   };
 
   useEffect(() => {
-    requestLocationPermission();
+    loadEvents();
   }, []);
-
-  useEffect(() => {
-    if (location) {
-      loadNearbyEvents();
-    }
-  }, [location]);
 
   useEffect(() => {
     handleCategorySelect(selectedCategory);
   }, [events]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [selectedCategory]);
 
   const renderCategory = ({ item }: { item: typeof eventCategories[0] }) => (
     <TouchableOpacity
@@ -391,12 +393,12 @@ export default function EventsScreen() {
           {loading ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.loadingText}>Finding nearby events...</Text>
+              <Text style={styles.loadingText}>Loading events...</Text>
             </View>
           ) : error ? (
             <View style={styles.centered}>
               <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={requestLocationPermission}>
+              <TouchableOpacity style={styles.retryButton} onPress={loadEvents}>
                 <Text style={styles.retryButtonText}>Try Again</Text>
               </TouchableOpacity>
             </View>
@@ -407,7 +409,7 @@ export default function EventsScreen() {
               ))}
               {filteredEvents.length === 0 && (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No events found in your area</Text>
+                  <Text style={styles.emptyStateText}>No events found</Text>
                   <Text style={styles.emptyStateSubtext}>Try selecting a different category or check back later</Text>
                 </View>
               )}

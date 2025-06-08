@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { Profile, Post, Place, Event, Badge, UserBadge, Connection } from './supabase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibetrips-backend-production.up.railway.app';
 
 class ApiClient {
   private async getAuthHeaders() {
@@ -30,6 +30,7 @@ class ApiClient {
 
       if (!response.ok) {
         const error = await response.text();
+        console.log(`API Error: ${response.status} - ${error}`);
         throw new Error(`API Error: ${response.status} - ${error}`);
       }
 
