@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,12 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, MessageCircle, Users, Award, MapPin, Camera, Settings, CreditCard as Edit3, Trophy, Target, Share2 } from 'lucide-react-native';
+import { User, MessageCircle, Users, Award, MapPin, Camera, Settings, CreditCard as Edit3, Trophy, Target, Share2, Search, Edit, Calendar, Heart, MessageSquare } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/lib/api';
+import { router } from 'expo-router';
+import type { Event, Post } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +44,20 @@ interface Achievement {
   progress: number;
   total: number;
   category: string;
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'post' | 'event';
+  title: string;
+  imageUrl: string;
+  location?: string;
+  date: string;
+  likes?: number;
+  comments?: number;
+  attendees?: number;
+  timestamp: string;
+  rawDate: Date;
 }
 
 const mockBadges: Badge[] = [
@@ -153,6 +170,7 @@ const mockAchievements: Achievement[] = [
   },
 ];
 
+
 const BadgeCard = ({ badge, index }: { badge: Badge; index: number }) => (
   <Animated.View
     entering={FadeInDown.delay(index * 50).springify()}
@@ -231,118 +249,197 @@ const AchievementCard = ({ achievement, index }: { achievement: Achievement; ind
 
 export default function SocialScreen() {
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'achievements'>('profile');
+  const [activeTab, setActiveTab] = useState<'posts' | 'network' | 'badges'>('posts');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadActivities = async () => {
+    setLoading(true);
+    try {
+      const [postsResult, eventsResult] = await Promise.all([
+        apiClient.safeRequest<{ posts: Post[] }>('/api/posts?limit=10'),
+        apiClient.safeRequest<{ events: Event[] }>('/api/events')
+      ]);
+
+      const activities: ActivityItem[] = [];
+
+      // Add posts
+      if (postsResult?.posts) {
+        postsResult.posts.forEach(post => {
+          activities.push({
+            id: `post-${post.id}`,
+            type: 'post',
+            title: post.content,
+            imageUrl: post.image_url || 'https://images.pexels.com/photos/1010657/pexels-photo-1010657.jpeg?auto=compress&cs=tinysrgb&w=300',
+            likes: post.likes_count,
+            comments: 0, // Add comments count if available
+            timestamp: new Date(post.created_at).toLocaleDateString(),
+            rawDate: new Date(post.created_at),
+            date: new Date(post.created_at).toLocaleDateString()
+          });
+        });
+      }
+
+      // Add events
+      if (eventsResult?.events) {
+        eventsResult.events.forEach(event => {
+          activities.push({
+            id: `event-${event.id}`,
+            type: 'event',
+            title: event.title,
+            imageUrl: event.image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
+            location: event.location,
+            attendees: event.attendees_count,
+            date: new Date(event.event_date).toLocaleDateString(),
+            timestamp: new Date(event.created_at).toLocaleDateString(),
+            rawDate: new Date(event.created_at)
+          });
+        });
+      }
+
+      // Sort by date (most recent first)
+      activities.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+      setActivities(activities);
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadActivities();
+  }, []);
+
+  const ActivityCard = ({ activity, index }: { activity: ActivityItem; index: number }) => (
+    <Animated.View
+      entering={FadeInDown.delay(index * 50).springify()}
+      style={[styles.activityCard, activity.type === 'event' ? styles.eventCard : styles.postCard]}
+    >
+      <Image source={{ uri: activity.imageUrl }} style={styles.activityImage} />
+      <View style={styles.activityOverlay}>
+        <Text style={styles.activityTitle} numberOfLines={2}>
+          {activity.title}
+        </Text>
+        {activity.location && (
+          <View style={styles.activityLocation}>
+            <MapPin color="#FFFFFF" size={10} strokeWidth={2} />
+            <Text style={styles.activityLocationText} numberOfLines={1}>
+              {activity.location}
+            </Text>
+          </View>
+        )}
+        <View style={styles.activityStats}>
+          {activity.type === 'post' ? (
+            <>
+              <View style={styles.statItem}>
+                <Heart color="#FFFFFF" size={10} strokeWidth={2} />
+                <Text style={styles.statText}>{activity.likes || 0}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <MessageSquare color="#FFFFFF" size={10} strokeWidth={2} />
+                <Text style={styles.statText}>{activity.comments || 0}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.statItem}>
+              <Users color="#FFFFFF" size={10} strokeWidth={2} />
+              <Text style={styles.statText}>{activity.attendees || 0}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'profile':
+      case 'posts':
         return (
           <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
             {/* Profile Stats */}
             <Animated.View entering={FadeInDown.delay(200)} style={styles.statsContainer}>
-              <View style={styles.statItem}>
+              <View style={styles.statContainer}>
+                <Text style={styles.statNumber}>{activities.filter(a => a.type === 'post').length}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </View>
+              <View style={styles.statContainer}>
+                <Text style={styles.statNumber}>{activities.filter(a => a.type === 'event').length}</Text>
+                <Text style={styles.statLabel}>Events</Text>
+              </View>
+              <View style={styles.statContainer}>
                 <Text style={styles.statNumber}>{profile?.places_visited || 0}</Text>
                 <Text style={styles.statLabel}>Places Visited</Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{profile?.events_attended || 0}</Text>
-                <Text style={styles.statLabel}>Events Attended</Text>
-              </View>
-              <View style={styles.statItem}>
+              <View style={styles.statContainer}>
                 <Text style={styles.statNumber}>0</Text>
                 <Text style={styles.statLabel}>Connections</Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{profile?.badges_earned || 0}</Text>
-                <Text style={styles.statLabel}>Badges Earned</Text>
-              </View>
             </Animated.View>
 
-            {/* Recent Activity */}
+            {/* Activity Grid */}
             <Animated.View entering={FadeInDown.delay(300)} style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Recent Activity</Text>
-              <View style={styles.activityList}>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityIcon}>
-                    <Award color="#FFD700" size={16} strokeWidth={2} />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityText}>Earned "Foodie Master" badge</Text>
-                    <Text style={styles.activityTime}>2 days ago</Text>
-                  </View>
-                </View>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityIcon}>
-                    <MapPin color="#007AFF" size={16} strokeWidth={2} />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityText}>Checked in at Secret Garden Café</Text>
-                    <Text style={styles.activityTime}>1 week ago</Text>
-                  </View>
-                </View>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityIcon}>
-                    <Users color="#34C759" size={16} strokeWidth={2} />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityText}>Connected with 5 new travelers</Text>
-                    <Text style={styles.activityTime}>2 weeks ago</Text>
-                  </View>
-                </View>
-              </View>
-            </Animated.View>
-
-            {/* Badges */}
-            <Animated.View entering={FadeInDown.delay(400)} style={styles.sectionContainer}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Badges</Text>
+                <Text style={styles.sectionTitle}>Recent Posts and Events</Text>
                 <TouchableOpacity>
-                  <Text style={styles.seeAllText}>See All</Text>
+                  <Text style={styles.seeAllText}>View All</Text>
                 </TouchableOpacity>
               </View>
-              <FlatList
-                data={mockBadges.slice(0, 4)}
-                renderItem={({ item, index }) => <BadgeCard badge={item} index={index} />}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                scrollEnabled={false}
-                contentContainerStyle={styles.badgesGrid}
-              />
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Loading activities...</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={activities}
+                  renderItem={({ item, index }) => <ActivityCard activity={item} index={index} />}
+                  keyExtractor={(item) => item.id}
+                  numColumns={3}
+                  scrollEnabled={false}
+                  contentContainerStyle={styles.activitiesGrid}
+                />
+              )}
             </Animated.View>
           </ScrollView>
         );
 
-      case 'connections':
+      case 'network':
         return (
-          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
-            <Animated.View entering={FadeInDown.delay(200)} style={styles.connectionsHeader}>
-              <Text style={styles.connectionsTitle}>Your Travel Network</Text>
-              <Text style={styles.connectionsSubtitle}>
-                Connect with fellow travelers and locals
-              </Text>
+          <View style={styles.tabContent}>
+            {/* Search Bar */}
+            <Animated.View entering={FadeInDown.delay(100)} style={styles.searchContainer}>
+              <View style={styles.searchBar}>
+                <Search color="#8E8E93" size={20} strokeWidth={2} />
+                <Text style={styles.searchPlaceholder}>Search connections...</Text>
+              </View>
             </Animated.View>
 
-            <View style={styles.connectionsList}>
-              {mockConnections.map((connection, index) => (
-                <ConnectionCard key={connection.id} connection={connection} index={index} />
-              ))}
-            </View>
+            <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              <Animated.View entering={FadeInDown.delay(200)} style={styles.connectionsHeader}>
+                <Text style={styles.connectionsTitle}>Your Travel Network</Text>
+                <Text style={styles.connectionsSubtitle}>
+                  Connect with fellow travelers and locals
+                </Text>
+              </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(600)} style={styles.suggestionsSection}>
-              <Text style={styles.sectionTitle}>Suggested Connections</Text>
-              <Text style={styles.suggestionsText}>
-                Based on your interests and travel history
-              </Text>
-            </Animated.View>
-          </ScrollView>
+              <View style={styles.emptyState}>
+                <Users color="#C7C7CC" size={48} strokeWidth={1.5} />
+                <Text style={styles.emptyStateTitle}>No connections yet</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Start connecting with fellow travelers to build your network
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
         );
 
-      case 'achievements':
+      case 'badges':
         return (
           <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
             <Animated.View entering={FadeInDown.delay(200)} style={styles.achievementsHeader}>
               <Trophy color="#FFD700" size={32} strokeWidth={2} />
-              <Text style={styles.achievementsTitle}>Your Progress</Text>
+              <Text style={styles.achievementsTitle}>Badges & Progress</Text>
               <Text style={styles.achievementsSubtitle}>
                 Complete challenges to unlock new badges
               </Text>
@@ -399,66 +496,66 @@ export default function SocialScreen() {
             </View>
           </View>
         </View>
-        <View style={styles.profileActions}>
-          <TouchableOpacity style={styles.profileActionButton}>
-            <Edit3 color="#007AFF" size={18} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileActionButton}>
-            <Share2 color="#007AFF" size={18} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileActionButton}>
-            <Settings color="#007AFF" size={18} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+      </Animated.View>
+
+      {/* Edit Profile Button */}
+      <Animated.View entering={FadeInDown.delay(150)} style={styles.editProfileContainer}>
+        <TouchableOpacity 
+          style={styles.editProfileButton}
+          onPress={() => router.push('/edit-profile')}
+        >
+          <Edit color="#007AFF" size={16} strokeWidth={2} />
+          <Text style={styles.editProfileButtonText}>Edit Profile</Text>
+        </TouchableOpacity>
       </Animated.View>
 
       {/* Tab Navigation */}
       <Animated.View entering={FadeInDown.delay(200)} style={styles.tabNavigation}>
         <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'profile' && styles.activeTabButton]}
-          onPress={() => setActiveTab('profile')}
+          style={[styles.tabButton, activeTab === 'posts' && styles.activeTabButton]}
+          onPress={() => setActiveTab('posts')}
         >
-          <User
-            color={activeTab === 'profile' ? '#007AFF' : '#8E8E93'}
+          <Camera
+            color={activeTab === 'posts' ? '#007AFF' : '#8E8E93'}
             size={20}
             strokeWidth={2}
           />
           <Text
-            style={[styles.tabButtonText, activeTab === 'profile' && styles.activeTabButtonText]}
+            style={[styles.tabButtonText, activeTab === 'posts' && styles.activeTabButtonText]}
           >
-            Profile
+            Posts
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'connections' && styles.activeTabButton]}
-          onPress={() => setActiveTab('connections')}
+          style={[styles.tabButton, activeTab === 'network' && styles.activeTabButton]}
+          onPress={() => setActiveTab('network')}
         >
           <Users
-            color={activeTab === 'connections' ? '#007AFF' : '#8E8E93'}
+            color={activeTab === 'network' ? '#007AFF' : '#8E8E93'}
             size={20}
             strokeWidth={2}
           />
           <Text
-            style={[styles.tabButtonText, activeTab === 'connections' && styles.activeTabButtonText]}
+            style={[styles.tabButtonText, activeTab === 'network' && styles.activeTabButtonText]}
           >
             Network
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'achievements' && styles.activeTabButton]}
-          onPress={() => setActiveTab('achievements')}
+          style={[styles.tabButton, activeTab === 'badges' && styles.activeTabButton]}
+          onPress={() => setActiveTab('badges')}
         >
-          <Target
-            color={activeTab === 'achievements' ? '#007AFF' : '#8E8E93'}
+          <Award
+            color={activeTab === 'badges' ? '#007AFF' : '#8E8E93'}
             size={20}
             strokeWidth={2}
           />
           <Text
-            style={[styles.tabButtonText, activeTab === 'achievements' && styles.activeTabButtonText]}
+            style={[styles.tabButtonText, activeTab === 'badges' && styles.activeTabButtonText]}
           >
-            Progress
+            Badges
           </Text>
         </TouchableOpacity>
       </Animated.View>
@@ -522,14 +619,27 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#8E8E93',
   },
-  profileActions: {
-    flexDirection: 'row',
-    gap: 8,
+  editProfileContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
   },
-  profileActionButton: {
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F2F2F7',
     borderRadius: 20,
-    padding: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  editProfileButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#007AFF',
   },
   tabNavigation: {
     flexDirection: 'row',
@@ -566,7 +676,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     marginBottom: 12,
   },
-  statItem: {
+  statContainer: {
     flex: 1,
     alignItems: 'center',
   },
@@ -851,5 +961,121 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     marginTop: 12,
     marginBottom: 100,
+  },
+  activitiesGrid: {
+    gap: 8,
+  },
+  activityCard: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginHorizontal: 4,
+    marginVertical: 4,
+    borderWidth: 2,
+  },
+  postCard: {
+    borderColor: '#007AFF',
+  },
+  eventCard: {
+    borderColor: '#34C759',
+  },
+  activityImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  activityOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 8,
+    gap: 4,
+  },
+  activityTitle: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    lineHeight: 12,
+  },
+  activityLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  activityLocationText: {
+    fontSize: 8,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  activityStats: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  statText: {
+    fontSize: 8,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#8E8E93',
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  searchPlaceholder: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#8E8E93',
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

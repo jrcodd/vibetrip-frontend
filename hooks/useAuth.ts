@@ -114,7 +114,7 @@ export function useAuthProvider() {
                 travel_style: '',
                 interests: []
               });
-              setProfile(newProfile);
+              setProfile(newProfile.profile);
               console.log('Profile created successfully');
             } catch (createError: any) {
               console.error('Failed to create profile:', createError.message);
