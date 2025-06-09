@@ -966,7 +966,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activityCard: {
-    flex: 1,
+    width: (width - 56) / 3,
     aspectRatio: 1,
     borderRadius: 8,
     overflow: 'hidden',

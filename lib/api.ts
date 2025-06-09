@@ -66,25 +66,25 @@ class ApiClient {
 
   // Profile methods
   async createProfile(profile: Omit<Profile, 'id' | 'places_visited' | 'events_attended' | 'badges_earned' | 'created_at' | 'updated_at'>) {
-    return this.request<{ message: string; profile: Profile }>('/api/profile', {
+    return this.request<{ message: string; profile: Profile }>('/api/v1/users/profile', {
       method: 'POST',
       body: JSON.stringify(profile),
     });
   }
 
   async getProfile(): Promise<Profile> {
-    return this.request<Profile>('/api/profile');
+    return this.request<Profile>('/api/v1/users/me');
   }
 
   async updateProfile(profile: Partial<Profile>) {
-    return this.request<{ message: string; profile: Profile }>('/api/profile', {
+    return this.request<Profile>('/api/v1/users/profile', {
       method: 'PUT',
       body: JSON.stringify(profile),
     });
   }
 
   async getUserProfile(userId: string): Promise<Profile> {
-    return this.request<Profile>(`/api/profiles/${userId}`);
+    return this.request<Profile>(`/api/v1/users/${userId}`);
   }
 
   // Posts methods
@@ -172,6 +172,98 @@ class ApiClient {
   // Feed method
   async getFeed(limit = 20, offset = 0): Promise<{ feed: Post[] }> {
     return this.request<{ feed: Post[] }>(`/v1/feed?limit=${limit}&offset=${offset}`);
+  }
+
+  // Avatar upload method
+  async uploadAvatar(imageUri: string): Promise<{ url: string }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // For React Native, we need to handle local file URIs differently
+      // Check if it's a local file URI (starts with file://)
+      if (imageUri.startsWith('file://')) {
+        // For local files, we need to create a file object directly
+        const filename = `avatar_${Date.now()}.jpg`;
+        
+        // Create file object for React Native
+        const file = {
+          uri: imageUri,
+          type: 'image/jpeg',
+          name: filename,
+        } as any;
+        
+        formData.append('file', file);
+        
+      } else {
+        // For remote URLs, fetch and convert to blob
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        try {
+          const response = await fetch(imageUri, { 
+            signal: controller.signal 
+          });
+          clearTimeout(timeoutId);
+          
+          const blob = await response.blob();
+          
+          // Check file size (limit to 5MB for avatars)
+          if (blob.size > 5 * 1024 * 1024) {
+            throw new Error('Avatar too large. Please select a smaller image (max 5MB)');
+          }
+          
+          const filename = `avatar_${Date.now()}.jpg`;
+          formData.append('file', blob as any, filename);
+          
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Avatar processing timed out. Please try a smaller image.');
+          }
+          throw new Error(`Failed to process avatar: ${fetchError.message}`);
+        }
+      }
+      
+      // Upload with timeout
+      const uploadController = new AbortController();
+      const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000);
+      
+      try {
+        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload-avatar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': headers.Authorization,
+            // Don't set Content-Type for FormData, let the browser set it with boundary
+          },
+          body: formData,
+          signal: uploadController.signal,
+        });
+
+        clearTimeout(uploadTimeoutId);
+
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.text();
+          throw new Error(`Avatar upload failed: ${uploadResponse.status} - ${error}`);
+        }
+
+        const result = await uploadResponse.json();
+        return { url: result.url };
+        
+      } catch (uploadError: any) {
+        clearTimeout(uploadTimeoutId);
+        if (uploadError.name === 'AbortError') {
+          throw new Error('Avatar upload timed out. Please try again with a smaller image.');
+        }
+        throw uploadError;
+      }
+      
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      throw new Error(`Avatar upload failed: ${error.message}`);
+    }
   }
 
   // Image upload method

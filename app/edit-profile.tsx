@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Save, Camera } from 'lucide-react-native';
@@ -17,10 +18,13 @@ import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function EditProfileScreen() {
   const { profile, loadProfile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     full_name: '',
     username: '',
@@ -43,6 +47,67 @@ export default function EditProfileScreen() {
     }
   }, [profile]);
 
+  const pickAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera roll permissions are required to select an avatar.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        exif: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedAvatar(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking avatar:', error);
+      Alert.alert('Error', 'Failed to select avatar');
+    }
+  };
+
+  const takeAvatarPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permissions are required to take a photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        exif: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedAvatar(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking avatar photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const showAvatarOptions = () => {
+    Alert.alert(
+      'Change Avatar',
+      'Choose how you want to set your avatar',
+      [
+        { text: 'Camera', onPress: takeAvatarPhoto },
+        { text: 'Photo Library', onPress: pickAvatar },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   const handleSave = async () => {
     if (!formData.username.trim()) {
       Alert.alert('Error', 'Username is required');
@@ -51,7 +116,27 @@ export default function EditProfileScreen() {
 
     setLoading(true);
     try {
-      await apiClient.updateProfile(formData);
+      let updateData = { ...formData };
+
+      // Upload avatar if one was selected
+      if (selectedAvatar) {
+        setUploadingAvatar(true);
+        try {
+          const uploadResult = await apiClient.uploadAvatar(selectedAvatar);
+          updateData.avatar_url = uploadResult.url;
+        } catch (uploadError: any) {
+          console.error('Avatar upload failed:', uploadError);
+          Alert.alert(
+            'Warning', 
+            'Profile updated but avatar upload failed. You can try uploading again later.',
+            [{ text: 'OK' }]
+          );
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+
+      await apiClient.updateProfile(updateData);
       await loadProfile();
       Alert.alert('Success', 'Profile updated successfully', [
         { text: 'OK', onPress: () => router.back() }
@@ -109,11 +194,31 @@ export default function EditProfileScreen() {
           {/* Profile Photo Section */}
           <Animated.View entering={FadeInDown.delay(200)} style={styles.photoSection}>
             <View style={styles.photoContainer}>
-              <View style={styles.photoPlaceholder}>
-                <Camera color="#8E8E93" size={32} strokeWidth={2} />
-              </View>
-              <TouchableOpacity style={styles.changePhotoButton}>
-                <Text style={styles.changePhotoText}>Change Photo</Text>
+              {selectedAvatar || profile?.avatar_url ? (
+                <View style={styles.avatarContainer}>
+                  <Image 
+                    source={{ uri: selectedAvatar || profile?.avatar_url }} 
+                    style={styles.avatarImage}
+                  />
+                  {uploadingAvatar && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Camera color="#8E8E93" size={32} strokeWidth={2} />
+                </View>
+              )}
+              <TouchableOpacity 
+                style={styles.changePhotoButton}
+                onPress={showAvatarOptions}
+                disabled={uploadingAvatar}
+              >
+                <Text style={styles.changePhotoText}>
+                  {uploadingAvatar ? 'Uploading...' : 'Change Photo'}
+                </Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -328,5 +433,29 @@ const styles = StyleSheet.create({
   },
   selectedInterestText: {
     color: '#FFFFFF',
+  },
+  avatarContainer: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#007AFF',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
