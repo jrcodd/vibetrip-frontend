@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, MessageCircle, Users, Award, MapPin, Camera, Settings, CreditCard as Edit3, Trophy, Target, Share2 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 
@@ -229,6 +230,7 @@ const AchievementCard = ({ achievement, index }: { achievement: Achievement; ind
 };
 
 export default function SocialScreen() {
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'achievements'>('profile');
 
   const renderContent = () => {
@@ -239,19 +241,19 @@ export default function SocialScreen() {
             {/* Profile Stats */}
             <Animated.View entering={FadeInDown.delay(200)} style={styles.statsContainer}>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>47</Text>
+                <Text style={styles.statNumber}>{profile?.places_visited || 0}</Text>
                 <Text style={styles.statLabel}>Places Visited</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>23</Text>
+                <Text style={styles.statNumber}>{profile?.events_attended || 0}</Text>
                 <Text style={styles.statLabel}>Events Attended</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>156</Text>
+                <Text style={styles.statNumber}>0</Text>
                 <Text style={styles.statLabel}>Connections</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>12</Text>
+                <Text style={styles.statNumber}>{profile?.badges_earned || 0}</Text>
                 <Text style={styles.statLabel}>Badges Earned</Text>
               </View>
             </Animated.View>
@@ -378,16 +380,22 @@ export default function SocialScreen() {
         <View style={styles.profileInfo}>
           <Image
             source={{
-              uri: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=200',
+              uri: profile?.avatar_url || 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=200',
             }}
             style={styles.profileAvatar}
           />
           <View style={styles.profileDetails}>
-            <Text style={styles.profileName}>Alex Morgan</Text>
-            <Text style={styles.profileBio}>Digital nomad exploring the world 🌍</Text>
+            <Text style={styles.profileName}>
+              {profile?.full_name || profile?.username || 'User'}
+            </Text>
+            <Text style={styles.profileBio}>
+              {profile?.bio || 'Digital nomad exploring the world 🌍'}
+            </Text>
             <View style={styles.profileLocation}>
               <MapPin color="#8E8E93" size={14} strokeWidth={2} />
-              <Text style={styles.locationText}>Currently in Tokyo, Japan</Text>
+              <Text style={styles.locationText}>
+                {profile?.location ? `Currently in ${profile.location}` : 'Location not set'}
+              </Text>
             </View>
           </View>
         </View>

@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Settings, CircleHelp as HelpCircle, Shield, Bell, Globe, CreditCard, Download, Book, Info, LogOut, ChevronRight, Moon, Smartphone, Volume2, Mail, MessageCircle, Star, Heart, MapPin, Camera } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import { useAuth } from '@/hooks/useAuth';
 
 interface MenuSection {
   title: string;
@@ -236,6 +237,16 @@ const QuickSettingCard = ({ item, index }: { item: MenuItem; index: number }) =>
 );
 
 export default function MoreScreen() {
+  const { user, profile, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -250,17 +261,25 @@ export default function MoreScreen() {
           <View style={styles.profileInfo}>
             <Image
               source={{
-                uri: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150',
+                uri: profile?.avatar_url || 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150',
               }}
               style={styles.profileAvatar}
             />
             <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>Alex Morgan</Text>
-              <Text style={styles.profileEmail}>alex.morgan@example.com</Text>
+              <Text style={styles.profileName}>
+                {profile?.full_name || profile?.username || 'User'}
+              </Text>
+              <Text style={styles.profileEmail}>
+                {user?.email || 'No email'}
+              </Text>
               <View style={styles.profileStats}>
-                <Text style={styles.profileStat}>47 places visited</Text>
+                <Text style={styles.profileStat}>
+                  {profile?.places_visited || 0} places visited
+                </Text>
                 <Text style={styles.statDivider}>•</Text>
-                <Text style={styles.profileStat}>12 badges earned</Text>
+                <Text style={styles.profileStat}>
+                  {profile?.badges_earned || 0} badges earned
+                </Text>
               </View>
             </View>
           </View>
@@ -305,7 +324,7 @@ export default function MoreScreen() {
             </Text>
           </View>
           
-          <TouchableOpacity style={styles.logoutButton}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <LogOut color="#FF3B30" size={20} strokeWidth={2} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>

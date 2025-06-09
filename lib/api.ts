@@ -73,7 +73,7 @@ class ApiClient {
   }
 
   async getProfile(): Promise<Profile> {
-    return this.request<Profile>('/api/profile');
+    return this.request<Profile>('/api/v1/users/me');
   }
 
   async updateProfile(profile: Partial<Profile>) {
