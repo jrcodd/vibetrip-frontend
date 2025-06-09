@@ -21,7 +21,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function EditProfileScreen() {
-  const { profile, loadProfile } = useAuth();
+  const { profile, updateProfile: updateAuthProfile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
@@ -98,8 +98,8 @@ export default function EditProfileScreen() {
 
   const showAvatarOptions = () => {
     Alert.alert(
-      'Change Avatar',
-      'Choose how you want to set your avatar',
+      'Select Avatar',
+      'Choose how you want to add your avatar',
       [
         { text: 'Camera', onPress: takeAvatarPhoto },
         { text: 'Photo Library', onPress: pickAvatar },
@@ -118,17 +118,20 @@ export default function EditProfileScreen() {
     try {
       let updateData = { ...formData };
 
-      // Upload avatar if one was selected
+      // Upload avatar if one was selected (copying event photo upload pattern)
+      let avatarUrl = updateData.avatar_url;
       if (selectedAvatar) {
         setUploadingAvatar(true);
         try {
-          const uploadResult = await apiClient.uploadAvatar(selectedAvatar);
-          updateData.avatar_url = uploadResult.url;
+          const uploadResult = await apiClient.uploadImage(selectedAvatar);
+          avatarUrl = uploadResult.url;
+          updateData.avatar_url = avatarUrl;
+          console.log('Avatar uploaded successfully:', avatarUrl);
         } catch (uploadError: any) {
           console.error('Avatar upload failed:', uploadError);
           Alert.alert(
             'Warning', 
-            'Profile updated but avatar upload failed. You can try uploading again later.',
+            'Profile will be updated but avatar upload failed. You can try uploading again later.',
             [{ text: 'OK' }]
           );
         } finally {
@@ -136,8 +139,11 @@ export default function EditProfileScreen() {
         }
       }
 
-      await apiClient.updateProfile(updateData);
-      await loadProfile();
+      await updateAuthProfile(updateData);
+      
+      // Explicitly refresh the profile to ensure latest data is loaded
+      await refreshProfile();
+      
       Alert.alert('Success', 'Profile updated successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -195,7 +201,11 @@ export default function EditProfileScreen() {
           <Animated.View entering={FadeInDown.delay(200)} style={styles.photoSection}>
             <View style={styles.photoContainer}>
               {selectedAvatar || profile?.avatar_url ? (
-                <View style={styles.avatarContainer}>
+                <TouchableOpacity 
+                  style={styles.avatarContainer}
+                  onPress={showAvatarOptions}
+                  disabled={uploadingAvatar}
+                >
                   <Image 
                     source={{ uri: selectedAvatar || profile?.avatar_url }} 
                     style={styles.avatarImage}
@@ -205,11 +215,15 @@ export default function EditProfileScreen() {
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               ) : (
-                <View style={styles.photoPlaceholder}>
+                <TouchableOpacity 
+                  style={styles.photoPlaceholder}
+                  onPress={showAvatarOptions}
+                  disabled={uploadingAvatar}
+                >
                   <Camera color="#8E8E93" size={32} strokeWidth={2} />
-                </View>
+                </TouchableOpacity>
               )}
               <TouchableOpacity 
                 style={styles.changePhotoButton}

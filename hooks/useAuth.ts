@@ -1,18 +1,37 @@
 import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
-import type { Profile } from '@/lib/supabase';
+import type { Profile, Post, Event } from '@/lib/supabase';
 import { apiClient } from '@/lib/api';
+
+interface ActivityItem {
+  id: string;
+  type: 'post' | 'event';
+  title: string;
+  imageUrl: string;
+  location?: string;
+  date: string;
+  likes?: number;
+  comments?: number;
+  attendees?: number;
+  timestamp: string;
+  rawDate: Date;
+}
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
   loading: boolean;
+  activities: ActivityItem[];
+  activitiesLoading: boolean;
   signUp: (email: string, password: string, userData?: any) => Promise<any>;
   signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  loadActivities: () => Promise<void>;
+  refreshActivities: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,7 +49,10 @@ export function useAuthProvider() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
   const creatingProfile = useRef(false);
+  const activitiesLoaded = useRef(false);
 
   useEffect(() => {
     // Get initial session
@@ -200,8 +222,85 @@ export function useAuthProvider() {
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) throw new Error('No user logged in');
     
-    const { profile: updatedProfile } = await apiClient.updateProfile(updates);
+    const updatedProfile = await apiClient.updateProfile(updates);
     setProfile(updatedProfile);
+  };
+
+  const refreshProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const profileData = await apiClient.getProfile();
+      setProfile(profileData);
+    } catch (error) {
+      console.error('Failed to refresh profile:', error);
+    }
+  };
+
+  const loadActivities = async () => {
+    // Only load if not already loaded or if forced
+    if (activitiesLoaded.current && activities.length > 0) {
+      return;
+    }
+
+    setActivitiesLoading(true);
+    try {
+      const [postsResult, eventsResult] = await Promise.all([
+        apiClient.safeRequest<{ posts: Post[] }>('/api/posts?limit=10'),
+        apiClient.safeRequest<{ events: Event[] }>('/api/events')
+      ]);
+
+      const newActivities: ActivityItem[] = [];
+
+      // Add posts
+      if (postsResult?.posts) {
+        postsResult.posts.forEach(post => {
+          newActivities.push({
+            id: `post-${post.id}`,
+            type: 'post',
+            title: post.content,
+            imageUrl: post.image_url || 'https://images.pexels.com/photos/1010657/pexels-photo-1010657.jpeg?auto=compress&cs=tinysrgb&w=300',
+            likes: post.likes_count,
+            comments: 0, // Add comments count if available
+            timestamp: new Date(post.created_at).toLocaleDateString(),
+            rawDate: new Date(post.created_at),
+            date: new Date(post.created_at).toLocaleDateString()
+          });
+        });
+      }
+
+      // Add events
+      if (eventsResult?.events) {
+        eventsResult.events.forEach(event => {
+          newActivities.push({
+            id: `event-${event.id}`,
+            type: 'event',
+            title: event.title,
+            imageUrl: event.image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
+            location: event.location,
+            attendees: event.attendees_count,
+            date: new Date(event.event_date).toLocaleDateString(),
+            timestamp: new Date(event.created_at).toLocaleDateString(),
+            rawDate: new Date(event.created_at)
+          });
+        });
+      }
+
+      // Sort by date (most recent first)
+      newActivities.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+      setActivities(newActivities);
+      activitiesLoaded.current = true;
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    } finally {
+      setActivitiesLoading(false);
+    }
+  };
+
+  const refreshActivities = async () => {
+    // Force reload activities
+    activitiesLoaded.current = false;
+    await loadActivities();
   };
 
   return {
@@ -209,10 +308,15 @@ export function useAuthProvider() {
     profile,
     session,
     loading,
+    activities,
+    activitiesLoading,
     signUp,
     signIn,
     signOut,
     updateProfile,
+    refreshProfile,
+    loadActivities,
+    refreshActivities,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   Image,
   FlatList,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, MessageCircle, Users, Award, MapPin, Camera, Settings, CreditCard as Edit3, Trophy, Target, Share2, Search, Edit, Calendar, Heart, MessageSquare } from 'lucide-react-native';
@@ -15,6 +16,7 @@ import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import type { Event, Post } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -46,19 +48,6 @@ interface Achievement {
   category: string;
 }
 
-interface ActivityItem {
-  id: string;
-  type: 'post' | 'event';
-  title: string;
-  imageUrl: string;
-  location?: string;
-  date: string;
-  likes?: number;
-  comments?: number;
-  attendees?: number;
-  timestamp: string;
-  rawDate: Date;
-}
 
 const mockBadges: Badge[] = [
   {
@@ -248,71 +237,23 @@ const AchievementCard = ({ achievement, index }: { achievement: Achievement; ind
 };
 
 export default function SocialScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile, activities, activitiesLoading, loadActivities, refreshActivities } = useAuth();
   const [activeTab, setActiveTab] = useState<'posts' | 'network' | 'badges'>('posts');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const loadActivities = async () => {
-    setLoading(true);
-    try {
-      const [postsResult, eventsResult] = await Promise.all([
-        apiClient.safeRequest<{ posts: Post[] }>('/api/posts?limit=10'),
-        apiClient.safeRequest<{ events: Event[] }>('/api/events')
-      ]);
-
-      const activities: ActivityItem[] = [];
-
-      // Add posts
-      if (postsResult?.posts) {
-        postsResult.posts.forEach(post => {
-          activities.push({
-            id: `post-${post.id}`,
-            type: 'post',
-            title: post.content,
-            imageUrl: post.image_url || 'https://images.pexels.com/photos/1010657/pexels-photo-1010657.jpeg?auto=compress&cs=tinysrgb&w=300',
-            likes: post.likes_count,
-            comments: 0, // Add comments count if available
-            timestamp: new Date(post.created_at).toLocaleDateString(),
-            rawDate: new Date(post.created_at),
-            date: new Date(post.created_at).toLocaleDateString()
-          });
-        });
-      }
-
-      // Add events
-      if (eventsResult?.events) {
-        eventsResult.events.forEach(event => {
-          activities.push({
-            id: `event-${event.id}`,
-            type: 'event',
-            title: event.title,
-            imageUrl: event.image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
-            location: event.location,
-            attendees: event.attendees_count,
-            date: new Date(event.event_date).toLocaleDateString(),
-            timestamp: new Date(event.created_at).toLocaleDateString(),
-            rawDate: new Date(event.created_at)
-          });
-        });
-      }
-
-      // Sort by date (most recent first)
-      activities.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
-      setActivities(activities);
-    } catch (error) {
-      console.error('Error loading activities:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
+    // Load activities once when component mounts
     loadActivities();
-  }, []);
+  }, [loadActivities]);
 
-  const ActivityCard = ({ activity, index }: { activity: ActivityItem; index: number }) => (
+  // Only refresh profile when screen comes into focus (not activities)
+  useFocusEffect(
+    React.useCallback(() => {
+      // Only refresh profile, not activities
+      refreshProfile();
+    }, [refreshProfile])
+  );
+
+  const ActivityCard = ({ activity, index }: { activity: any; index: number }) => (
     <Animated.View
       entering={FadeInDown.delay(index * 50).springify()}
       style={[styles.activityCard, activity.type === 'event' ? styles.eventCard : styles.postCard]}
@@ -357,7 +298,18 @@ export default function SocialScreen() {
     switch (activeTab) {
       case 'posts':
         return (
-          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.tabContent} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={activitiesLoading}
+                onRefresh={refreshActivities}
+                tintColor="#007AFF"
+                title="Pull to refresh activities"
+              />
+            }
+          >
             {/* Profile Stats */}
             <Animated.View entering={FadeInDown.delay(200)} style={styles.statsContainer}>
               <View style={styles.statContainer}>
@@ -386,7 +338,7 @@ export default function SocialScreen() {
                   <Text style={styles.seeAllText}>View All</Text>
                 </TouchableOpacity>
               </View>
-              {loading ? (
+              {activitiesLoading ? (
                 <View style={styles.loadingContainer}>
                   <Text style={styles.loadingText}>Loading activities...</Text>
                 </View>

@@ -26,6 +26,7 @@ import {
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { apiClient } from '../../lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import type { Event } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -211,11 +212,12 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
 };
 
 export default function EventsScreen() {
+  const { activities, activitiesLoading, loadActivities, refreshActivities } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [events, setEvents] = useState<EventCardData[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<EventCardData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filteredEvents, setFilteredEvents] = useState<any[]>([]);
+
+  // Get events from cached activities
+  const events = activities.filter(activity => activity.type === 'event');
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);

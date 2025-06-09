@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   X, 
   Camera, 
@@ -40,6 +41,7 @@ const eventCategories = [
 ];
 
 export default function CreateEventScreen() {
+  const { refreshActivities } = useAuth();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -268,6 +270,9 @@ export default function CreateEventScreen() {
 
       console.log('Creating event with data:', eventData);
       await apiClient.createEvent(eventData);
+      
+      // Refresh activities cache to include the new event
+      await refreshActivities();
       
       Alert.alert(
         'Success!', 
