@@ -114,21 +114,33 @@ export function useAuthProvider() {
                 travel_style: '',
                 interests: []
               });
-              setProfile(newProfile.profile);
+              setProfile(newProfile);
               console.log('Profile created successfully');
             } catch (createError: any) {
               console.error('Failed to create profile:', createError.message);
               
-              // If profile already exists (duplicate key error), try to fetch it
-              if (createError.message.includes('already exists') || createError.message.includes('23505')) {
-                console.log('Profile already exists, attempting to fetch it...');
+              // If profile already exists, try to fetch it with a delay
+              if (createError.message.includes('already exists') || createError.message.includes('23505') || createError.message.includes('Profile already exists')) {
+                console.log('Profile already exists, attempting to fetch it after delay...');
                 try {
+                  // Wait a bit and try again - sometimes there's a delay in DB consistency
+                  await new Promise(resolve => setTimeout(resolve, 1000));
                   const existingProfile = await apiClient.getProfile();
                   setProfile(existingProfile);
                   console.log('Successfully fetched existing profile');
-                } catch (fetchError) {
+                } catch (fetchError: any) {
                   console.error('Failed to fetch existing profile:', fetchError);
-                  setProfile(null);
+                  // If we still can't fetch, it might be because the profile trigger is creating it
+                  // Try one more time with a longer delay
+                  try {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const existingProfile = await apiClient.getProfile();
+                    setProfile(existingProfile);
+                    console.log('Successfully fetched existing profile after retry');
+                  } catch (finalError) {
+                    console.error('Final attempt to fetch profile failed:', finalError);
+                    setProfile(null);
+                  }
                 }
               } else {
                 setProfile(null);

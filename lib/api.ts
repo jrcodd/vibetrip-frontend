@@ -66,7 +66,7 @@ class ApiClient {
 
   // Profile methods
   async createProfile(profile: Omit<Profile, 'id' | 'places_visited' | 'events_attended' | 'badges_earned' | 'created_at' | 'updated_at'>) {
-    return this.request<{ message: string; profile: Profile }>('/api/profile', {
+    return this.request<Profile>('/api/v1/users/profile', {
       method: 'POST',
       body: JSON.stringify(profile),
     });
