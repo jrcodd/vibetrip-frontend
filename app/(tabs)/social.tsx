@@ -239,19 +239,18 @@ const AchievementCard = ({ achievement, index }: { achievement: Achievement; ind
 export default function SocialScreen() {
   const { user, profile, refreshProfile, activities, activitiesLoading, loadActivities, refreshActivities } = useAuth();
   const [activeTab, setActiveTab] = useState<'posts' | 'network' | 'badges'>('posts');
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
 
   useEffect(() => {
     // Load activities once when component mounts
-    loadActivities();
-  }, [loadActivities]);
+    if (!hasLoadedInitialData) {
+      loadActivities();
+      setHasLoadedInitialData(true);
+    }
+  }, [loadActivities, hasLoadedInitialData]);
 
-  // Only refresh profile when screen comes into focus (not activities)
-  useFocusEffect(
-    React.useCallback(() => {
-      // Only refresh profile, not activities
-      refreshProfile();
-    }, [refreshProfile])
-  );
+  // Remove the automatic profile refresh on focus - it causes excessive API calls
+  // Profile data is already managed by the useAuth hook and will be updated when needed
 
   const ActivityCard = ({ activity, index }: { activity: any; index: number }) => (
     <Animated.View

@@ -141,8 +141,8 @@ export default function EditProfileScreen() {
 
       await updateAuthProfile(updateData);
       
-      // Explicitly refresh the profile to ensure latest data is loaded
-      await refreshProfile();
+      // Force refresh the profile to ensure latest data is loaded
+      await refreshProfile(true);
       
       Alert.alert('Success', 'Profile updated successfully', [
         { text: 'OK', onPress: () => router.back() }

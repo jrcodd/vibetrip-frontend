@@ -417,6 +417,18 @@ class ApiClient {
     }
   }
 
+  async deleteEvent(eventId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/events/${eventId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deletePastEvents(): Promise<{ message: string; deletedCount: number }> {
+    return this.request<{ message: string; deletedCount: number }>('/api/events/cleanup-past', {
+      method: 'POST',
+    });
+  }
+
 }
 
 export const apiClient = new ApiClient();

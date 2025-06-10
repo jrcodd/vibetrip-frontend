@@ -16,6 +16,13 @@ interface ActivityItem {
   attendees?: number;
   timestamp: string;
   rawDate: Date;
+  // Additional event-specific fields for better caching
+  category?: string;
+  price?: string;
+  maxAttendees?: number;
+  description?: string;
+  eventDate?: Date;
+  userRsvpStatus?: 'going' | 'interested' | 'not_going';
 }
 
 interface AuthContextType {
@@ -25,6 +32,11 @@ interface AuthContextType {
   loading: boolean;
   activities: ActivityItem[];
   activitiesLoading: boolean;
+  // Helper methods to get specific cached data
+  getCachedEvents: () => ActivityItem[];
+  getCachedPosts: () => ActivityItem[];
+  getCachedEventById: (eventId: string) => ActivityItem | null;
+  updateCachedEventRsvp: (eventId: string, rsvpStatus: 'going' | 'interested' | 'not_going') => void;
   signUp: (email: string, password: string, userData?: any) => Promise<any>;
   signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
@@ -53,6 +65,8 @@ export function useAuthProvider() {
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const creatingProfile = useRef(false);
   const activitiesLoaded = useRef(false);
+  const profileLoadTime = useRef<number | null>(null);
+  const PROFILE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
   useEffect(() => {
     // Get initial session
@@ -95,6 +109,7 @@ export function useAuthProvider() {
         try {
           const profileData = await apiClient.getProfile();
           setProfile(profileData);
+          profileLoadTime.current = Date.now();
         } catch (profileError: any) {
           console.log('Profile not found, attempting to create one:', profileError.message);
           
@@ -137,6 +152,7 @@ export function useAuthProvider() {
                 interests: []
               });
               setProfile(newProfile.profile);
+              profileLoadTime.current = Date.now();
               console.log('Profile created successfully');
             } catch (createError: any) {
               console.error('Failed to create profile:', createError.message);
@@ -149,6 +165,7 @@ export function useAuthProvider() {
                   await new Promise(resolve => setTimeout(resolve, 1000));
                   const existingProfile = await apiClient.getProfile();
                   setProfile(existingProfile);
+                  profileLoadTime.current = Date.now();
                   console.log('Successfully fetched existing profile');
                 } catch (fetchError: any) {
                   console.error('Failed to fetch existing profile:', fetchError);
@@ -158,6 +175,7 @@ export function useAuthProvider() {
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     const existingProfile = await apiClient.getProfile();
                     setProfile(existingProfile);
+                    profileLoadTime.current = Date.now();
                     console.log('Successfully fetched existing profile after retry');
                   } catch (finalError) {
                     console.error('Final attempt to fetch profile failed:', finalError);
@@ -224,14 +242,26 @@ export function useAuthProvider() {
     
     const updatedProfile = await apiClient.updateProfile(updates);
     setProfile(updatedProfile);
+    profileLoadTime.current = Date.now(); // Update cache time after profile update
   };
 
-  const refreshProfile = async () => {
+  const refreshProfile = async (forceRefresh = false) => {
     if (!user) return;
     
+    // Check if we need to refresh based on cache duration
+    const now = Date.now();
+    const lastLoadTime = profileLoadTime.current;
+    
+    if (!forceRefresh && lastLoadTime && (now - lastLoadTime) < PROFILE_CACHE_DURATION) {
+      console.log('Profile data is still fresh, skipping API call');
+      return;
+    }
+    
     try {
+      console.log('Refreshing profile data from API');
       const profileData = await apiClient.getProfile();
       setProfile(profileData);
+      profileLoadTime.current = now;
     } catch (error) {
       console.error('Failed to refresh profile:', error);
     }
@@ -269,7 +299,7 @@ export function useAuthProvider() {
         });
       }
 
-      // Add events
+      // Add events with enhanced data for caching
       if (eventsResult?.events) {
         eventsResult.events.forEach(event => {
           newActivities.push({
@@ -281,7 +311,14 @@ export function useAuthProvider() {
             attendees: event.attendees_count,
             date: new Date(event.event_date).toLocaleDateString(),
             timestamp: new Date(event.created_at).toLocaleDateString(),
-            rawDate: new Date(event.created_at)
+            rawDate: new Date(event.created_at),
+            // Additional event fields for caching
+            category: event.category,
+            price: event.price || 'Free',
+            maxAttendees: event.max_attendees,
+            description: event.description,
+            eventDate: new Date(event.event_date),
+            userRsvpStatus: event.user_rsvp_status
           });
         });
       }
@@ -303,6 +340,41 @@ export function useAuthProvider() {
     await loadActivities();
   };
 
+  // Helper methods for cached data access
+  const getCachedEvents = () => {
+    return activities.filter(activity => activity.type === 'event');
+  };
+
+  const getCachedPosts = () => {
+    return activities.filter(activity => activity.type === 'post');
+  };
+
+  const getCachedEventById = (eventId: string) => {
+    const fullEventId = eventId.startsWith('event-') ? eventId : `event-${eventId}`;
+    return activities.find(activity => activity.id === fullEventId) || null;
+  };
+
+  const updateCachedEventRsvp = (eventId: string, rsvpStatus: 'going' | 'interested' | 'not_going') => {
+    const fullEventId = eventId.startsWith('event-') ? eventId : `event-${eventId}`;
+    setActivities(prevActivities => 
+      prevActivities.map(activity => {
+        if (activity.id === fullEventId && activity.type === 'event') {
+          return {
+            ...activity,
+            userRsvpStatus: rsvpStatus,
+            // Update attendee count based on RSVP change
+            attendees: rsvpStatus === 'going' 
+              ? (activity.attendees || 0) + (activity.userRsvpStatus === 'going' ? 0 : 1)
+              : activity.userRsvpStatus === 'going' 
+                ? Math.max(0, (activity.attendees || 0) - 1)
+                : activity.attendees || 0
+          };
+        }
+        return activity;
+      })
+    );
+  };
+
   return {
     user,
     profile,
@@ -310,6 +382,10 @@ export function useAuthProvider() {
     loading,
     activities,
     activitiesLoading,
+    getCachedEvents,
+    getCachedPosts,
+    getCachedEventById,
+    updateCachedEventRsvp,
     signUp,
     signIn,
     signOut,

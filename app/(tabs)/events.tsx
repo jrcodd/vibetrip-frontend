@@ -10,6 +10,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -49,6 +50,7 @@ interface EventCardData {
   };
   isGoing: boolean;
   isInterested: boolean;
+  eventDateTime?: Date;
 }
 
 const eventCategories = [
@@ -58,6 +60,9 @@ const eventCategories = [
   { id: 'art', name: 'Art & Culture', color: '#AF52DE' },
   { id: 'sports', name: 'Sports', color: '#FF3B30' },
   { id: 'tech', name: 'Tech', color: '#5AC8FA' },
+  { id: 'outdoor', name: 'Outdoor', color: '#32D74B' },
+  { id: 'social', name: 'Social', color: '#FF2D92' },
+  { id: 'wellness', name: 'Wellness', color: '#30D158' },
 ];
 
 
@@ -84,7 +89,7 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
 
     setIsUpdating(true);
     let newStatus: 'going' | 'interested' | 'not_going';
-    
+
     if (isGoing) {
       newStatus = 'not_going';
     } else if (isInterested) {
@@ -96,7 +101,7 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
     // Optimistic update
     const prevGoing = isGoing;
     const prevInterested = isInterested;
-    
+
     if (newStatus === 'going') {
       setIsGoing(true);
       setIsInterested(false);
@@ -141,7 +146,9 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
         <View style={styles.eventContent}>
           <View style={styles.eventHeader}>
             <Text style={styles.eventTitle}>{event.title}</Text>
-            <Text style={styles.eventPrice}>{event.price}</Text>
+            <Text style={styles.eventPrice}>
+              {event.price !== 'Free' ? `$${event.price}` : event.price}
+            </Text>
           </View>
 
           <Text style={styles.eventDescription} numberOfLines={2}>
@@ -173,8 +180,8 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
           </View>
 
           <View style={styles.eventActions}>
-            <TouchableOpacity 
-              style={[styles.rsvpButton, isUpdating && styles.rsvpButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.rsvpButton, isUpdating && styles.rsvpButtonDisabled]}
               onPress={handleRSVP}
               disabled={isUpdating}
             >
@@ -212,12 +219,16 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
 };
 
 export default function EventsScreen() {
-  const { activities, activitiesLoading, loadActivities, refreshActivities } = useAuth();
+  const { activities, activitiesLoading, loadActivities, refreshActivities, getCachedEvents, updateCachedEventRsvp } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [filteredEvents, setFilteredEvents] = useState<any[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<EventCardData[]>([]);
+  const [events, setEvents] = useState<EventCardData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Get events from cached activities
-  const events = activities.filter(activity => activity.type === 'event');
+  // Get events from cached activities using helper method
+  const cachedEvents = getCachedEvents();
 
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategory(categoryId);
@@ -228,33 +239,78 @@ export default function EventsScreen() {
     }
   };
 
-  const loadEvents = async () => {
+  const cleanupPastEvents = async (eventsList: EventCardData[]): Promise<EventCardData[]> => {
+    try {
+      const now = new Date();
+      const pastEvents = eventsList.filter(event => {
+        if (!event.eventDateTime) return false;
+        return event.eventDateTime < now;
+      });
+
+      const futureEvents = eventsList.filter(event => {
+        if (!event.eventDateTime) return true; // Keep events without dates
+        return event.eventDateTime >= now;
+      });
+
+      if (pastEvents.length > 0) {
+        console.log(`Found ${pastEvents.length} past events, cleaning up...`);
+
+        try {
+          // Use bulk cleanup endpoint to delete all past events
+          const result = await apiClient.deletePastEvents();
+          console.log(`Cleanup result: ${result.message}`);
+        } catch (error) {
+          console.error('Failed to cleanup past events:', error);
+        }
+      }
+
+      return futureEvents;
+    } catch (error) {
+      console.error('Error during past events cleanup:', error);
+      return eventsList; // Return original list if cleanup fails
+    }
+  };
+
+  const loadEvents = async (forceRefresh = false) => {
+    // Use cached data if available and not forcing refresh
+    if (!forceRefresh && cachedEvents.length > 0) {
+      console.log('Using cached events data');
+      const transformedEvents = transformCachedEvents(cachedEvents);
+
+      // Check for and delete past events after sorting
+      const futureEvents = await cleanupPastEvents(transformedEvents);
+
+      setEvents(futureEvents);
+      setFilteredEvents(futureEvents);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      
+
       const isAuth = await apiClient.isAuthenticated();
       if (!isAuth) {
         setError('Please log in to view events');
         return;
       }
 
-      console.log('Fetching events with category:', selectedCategory === 'all' ? 'all' : selectedCategory);
+      console.log('Fetching events from API with category:', selectedCategory === 'all' ? 'all' : selectedCategory);
       const result = await apiClient.getEvents(selectedCategory === 'all' ? undefined : selectedCategory);
       console.log('API result:', result);
-      
+
       if (result && result.events) {
-        // Transform database events to card data format
+        // Transform database events to card data format (events already sorted by database)
         const transformedEvents: EventCardData[] = result.events.map((event: any) => {
           console.log('Event data:', JSON.stringify(event, null, 2)); // Debug log
           const eventDate = new Date(event.event_date);
           const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-          
+
           // Handle joined profile data - could be nested under 'profiles' key
           const organizerProfile = event.profiles || event.organizer_profile;
           console.log('Organizer profile:', organizerProfile);
-          
+
           return {
             id: event.id,
             title: event.title,
@@ -272,12 +328,16 @@ export default function EventsScreen() {
               avatar: organizerProfile?.avatar_url || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
             },
             isGoing: event.user_rsvp_status === 'going',
-            isInterested: event.user_rsvp_status === 'interested'
+            isInterested: event.user_rsvp_status === 'interested',
+            eventDateTime: eventDate
           };
         });
-        
-        setEvents(transformedEvents);
-        setFilteredEvents(transformedEvents);
+
+        // Check for and delete past events (no sorting needed, events are pre-sorted by database)
+        const futureEvents = await cleanupPastEvents(transformedEvents);
+
+        setEvents(futureEvents);
+        setFilteredEvents(futureEvents);
       }
     } catch (error) {
       console.error('Error loading events:', error);
@@ -287,36 +347,166 @@ export default function EventsScreen() {
     }
   };
 
+  const transformCachedEvents = (cachedEvents: any[]): EventCardData[] => {
+    // Cached events should already be sorted, no need to sort again
+    return cachedEvents.map((activity: any) => {
+      // Extract the event ID from the activity ID (format: 'event-{id}')
+      const eventId = activity.id.replace('event-', '');
+
+      // Format date and time from cached data
+      const eventDate = activity.eventDate ? new Date(activity.eventDate) : new Date();
+      const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+      return {
+        id: eventId,
+        title: activity.title,
+        description: activity.description || activity.title,
+        image: activity.imageUrl,
+        date: dateStr,
+        time: timeStr,
+        location: activity.location || 'Location TBD',
+        category: activity.category || 'all',
+        price: activity.price || 'Free',
+        attendees: activity.attendees || 0,
+        maxAttendees: activity.maxAttendees,
+        organizer: {
+          name: 'Event Organizer',
+          avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
+        },
+        isGoing: activity.userRsvpStatus === 'going',
+        isInterested: activity.userRsvpStatus === 'interested',
+        eventDateTime: eventDate
+      };
+    });
+  };
+
 
   const handleRsvpUpdate = (eventId: string, status: string, prevStatus?: { isGoing: boolean; isInterested: boolean }) => {
     const updateEvent = (event: EventCardData) => {
       if (event.id !== eventId) return event;
-      
+
       let attendeeChange = 0;
       const wasGoing = prevStatus?.isGoing || event.isGoing;
       const willBeGoing = status === 'going';
-      
+
       // Calculate attendee count change
       if (wasGoing && !willBeGoing) {
         attendeeChange = -1; // Was going, now not going
       } else if (!wasGoing && willBeGoing) {
         attendeeChange = 1; // Wasn't going, now going
       }
-      
-      return { 
-        ...event, 
+
+      return {
+        ...event,
         isGoing: status === 'going',
         isInterested: status === 'interested',
         attendees: Math.max(0, event.attendees + attendeeChange)
       };
     };
-    
+
+    // Update local state
     setEvents(prevEvents => prevEvents.map(updateEvent));
     setFilteredEvents(prevEvents => prevEvents.map(updateEvent));
+
+    // Update cached data in auth context
+    updateCachedEventRsvp(eventId, status as 'going' | 'interested' | 'not_going');
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Refresh both activities and events data
+      await refreshActivities();
+      await loadEvents(true);
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Calculate real stats from event data
+  const calculateEventStats = () => {
+    const now = new Date();
+
+    // Get the start of the current week (Sunday)
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Get the end of the current week (Saturday)
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    // Count events this week - use cached events with better date access
+    let eventsThisWeek = 0;
+
+    // Check cached events first (they have eventDate field)
+    const cachedEventsWithDates = cachedEvents.filter(activity => {
+      if (activity.eventDate) {
+        const eventDate = new Date(activity.eventDate);
+        return eventDate >= startOfWeek && eventDate <= endOfWeek;
+      }
+      return false;
+    });
+
+    // If we have cached events with proper dates, use those
+    if (cachedEventsWithDates.length > 0) {
+      eventsThisWeek = cachedEventsWithDates.length;
+    } else {
+      // Fallback to parsing display dates from events array
+      eventsThisWeek = events.filter(event => {
+        if (!event.date) return false;
+
+        // Parse the date string (format: "Dec 15", "Jan 2", etc.)
+        const eventDate = new Date();
+        const dateStr = event.date; // e.g., "Dec 15"
+        const parts = dateStr.split(' ');
+
+        if (parts.length >= 2) {
+          const [month, day] = parts;
+
+          // Map month abbreviations to numbers
+          const monthMap: { [key: string]: number } = {
+            'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+            'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+          };
+
+          if (monthMap[month] !== undefined && !isNaN(parseInt(day))) {
+            eventDate.setMonth(monthMap[month]);
+            eventDate.setDate(parseInt(day));
+            eventDate.setFullYear(now.getFullYear());
+
+            // If the event date is in the past, assume it's next year
+            if (eventDate < now) {
+              eventDate.setFullYear(now.getFullYear() + 1);
+            }
+
+            return eventDate >= startOfWeek && eventDate <= endOfWeek;
+          }
+        }
+        return false;
+      }).length;
+    }
+
+    // Count going and interested events
+    const goingCount = events.filter(event => event.isGoing).length;
+    const interestedCount = events.filter(event => event.isInterested).length;
+
+    return {
+      eventsThisWeek,
+      goingCount,
+      interestedCount
+    };
   };
 
   useEffect(() => {
-    loadEvents();
+    // Load activities first, then load events
+    loadActivities().then(() => {
+      loadEvents();
+    });
   }, []);
 
   useEffect(() => {
@@ -324,8 +514,22 @@ export default function EventsScreen() {
   }, [events]);
 
   useEffect(() => {
-    loadEvents();
+    // Force refresh when category changes
+    loadEvents(true);
   }, [selectedCategory]);
+
+  useEffect(() => {
+    // Update events when cached activities change
+    if (cachedEvents.length > 0 && events.length === 0) {
+      const transformedEvents = transformCachedEvents(cachedEvents);
+
+      // Clean up past events
+      cleanupPastEvents(transformedEvents).then(futureEvents => {
+        setEvents(futureEvents);
+        setFilteredEvents(futureEvents);
+      });
+    }
+  }, [cachedEvents]);
 
   const renderCategory = ({ item }: { item: typeof eventCategories[0] }) => (
     <TouchableOpacity
@@ -361,7 +565,19 @@ export default function EventsScreen() {
         </View>
       </Animated.View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#007AFF"
+            title="Pull to refresh events"
+            titleColor="#8E8E93"
+          />
+        }
+      >
         {/* Categories */}
         <Animated.View entering={FadeInDown.delay(200)} style={styles.categoriesSection}>
           <FlatList
@@ -376,18 +592,25 @@ export default function EventsScreen() {
 
         {/* Quick Stats */}
         <Animated.View entering={FadeInDown.delay(300)} style={styles.statsSection}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>12</Text>
-            <Text style={styles.statLabel}>Events This Week</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>5</Text>
-            <Text style={styles.statLabel}>Going</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>8</Text>
-            <Text style={styles.statLabel}>Interested</Text>
-          </View>
+          {(() => {
+            const stats = calculateEventStats();
+            return (
+              <>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{stats.eventsThisWeek}</Text>
+                  <Text style={styles.statLabel}>Events This Week</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{stats.goingCount}</Text>
+                  <Text style={styles.statLabel}>Going</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{stats.interestedCount}</Text>
+                  <Text style={styles.statLabel}>Interested</Text>
+                </View>
+              </>
+            );
+          })()}
         </Animated.View>
 
         {/* Events List */}
@@ -399,7 +622,7 @@ export default function EventsScreen() {
             <Text style={styles.resultCount}>{filteredEvents.length} events</Text>
           </Animated.View>
 
-          {loading ? (
+          {(loading || activitiesLoading) ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#007AFF" />
               <Text style={styles.loadingText}>Loading events...</Text>
@@ -407,7 +630,7 @@ export default function EventsScreen() {
           ) : error ? (
             <View style={styles.centered}>
               <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={loadEvents}>
+              <TouchableOpacity style={styles.retryButton} onPress={() => loadEvents(true)}>
                 <Text style={styles.retryButtonText}>Try Again</Text>
               </TouchableOpacity>
             </View>
