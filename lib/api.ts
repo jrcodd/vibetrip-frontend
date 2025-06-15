@@ -182,6 +182,9 @@ class ApiClient {
       // Create FormData for file upload
       const formData = new FormData();
       
+      // Add bucket name for avatar upload
+      formData.append('bucket_name', 'avatars');
+      
       // For React Native, we need to handle local file URIs differently
       // Check if it's a local file URI (starts with file://)
       if (imageUri.startsWith('file://')) {
@@ -232,7 +235,7 @@ class ApiClient {
       const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000);
       
       try {
-        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload-avatar`, {
+        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload-image`, {
           method: 'POST',
           headers: {
             'Authorization': headers.Authorization,
@@ -267,12 +270,15 @@ class ApiClient {
   }
 
   // Image upload method
-  async uploadImage(imageUri: string): Promise<{ url: string }> {
+  async uploadImage(imageUri: string, bucketName: string = 'event-images'): Promise<{ url: string }> {
     try {
       const headers = await this.getAuthHeaders();
       
       // Create FormData for file upload
       const formData = new FormData();
+      
+      // Add bucket name for image upload
+      formData.append('bucket_name', bucketName);
       
       // For React Native, we need to handle local file URIs differently
       // Check if it's a local file URI (starts with file://)
@@ -302,9 +308,11 @@ class ApiClient {
           
           const blob = await response.blob();
           
-          // Check file size (limit to 5MB on frontend)
-          if (blob.size > 5 * 1024 * 1024) {
-            throw new Error('File too large. Please select a smaller image (max 5MB)');
+          // Check file size (limit to 10MB for event images by default)
+          const maxSize = bucketName === 'event-images' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+          if (blob.size > maxSize) {
+            const maxSizeMB = maxSize / 1024 / 1024;
+            throw new Error(`File too large. Please select a smaller image (max ${maxSizeMB}MB)`);
           }
           
           const filename = `image_${Date.now()}.jpg`;
