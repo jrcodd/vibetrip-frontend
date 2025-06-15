@@ -32,6 +32,7 @@ export default function EditProfileScreen() {
     location: '',
     travel_style: '',
     interests: [] as string[],
+    avatar_url: '',
   });
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function EditProfileScreen() {
         location: profile.location || '',
         travel_style: profile.travel_style || '',
         interests: profile.interests || [],
+        avatar_url: profile.avatar_url || '',
       });
     }
   }, [profile]);
@@ -56,7 +58,7 @@ export default function EditProfileScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -126,11 +128,10 @@ export default function EditProfileScreen() {
           const uploadResult = await apiClient.uploadImage(selectedAvatar);
           avatarUrl = uploadResult.url;
           updateData.avatar_url = avatarUrl;
-          console.log('Avatar uploaded successfully:', avatarUrl);
         } catch (uploadError: any) {
           console.error('Avatar upload failed:', uploadError);
           Alert.alert(
-            'Warning', 
+            'Warning',
             'Profile will be updated but avatar upload failed. You can try uploading again later.',
             [{ text: 'OK' }]
           );
@@ -140,10 +141,9 @@ export default function EditProfileScreen() {
       }
 
       await updateAuthProfile(updateData);
-      
-      // Force refresh the profile to ensure latest data is loaded
-      await refreshProfile(true);
-      
+
+      await refreshProfile();
+
       Alert.alert('Success', 'Profile updated successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -172,15 +172,15 @@ export default function EditProfileScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => router.back()}
         >
           <ArrowLeft color="#007AFF" size={24} strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity 
-          style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+        <TouchableOpacity
+          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={loading}
         >
@@ -192,8 +192,8 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      <KeyboardAvoidingView 
-        style={styles.content} 
+      <KeyboardAvoidingView
+        style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -201,13 +201,13 @@ export default function EditProfileScreen() {
           <Animated.View entering={FadeInDown.delay(200)} style={styles.photoSection}>
             <View style={styles.photoContainer}>
               {selectedAvatar || profile?.avatar_url ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.avatarContainer}
                   onPress={showAvatarOptions}
                   disabled={uploadingAvatar}
                 >
-                  <Image 
-                    source={{ uri: selectedAvatar || profile?.avatar_url }} 
+                  <Image
+                    source={{ uri: selectedAvatar || profile?.avatar_url }}
                     style={styles.avatarImage}
                   />
                   {uploadingAvatar && (
@@ -217,7 +217,7 @@ export default function EditProfileScreen() {
                   )}
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.photoPlaceholder}
                   onPress={showAvatarOptions}
                   disabled={uploadingAvatar}
@@ -225,7 +225,7 @@ export default function EditProfileScreen() {
                   <Camera color="#8E8E93" size={32} strokeWidth={2} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.changePhotoButton}
                 onPress={showAvatarOptions}
                 disabled={uploadingAvatar}

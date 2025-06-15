@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api';
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react-native';
 
 export default function SignUpScreen() {
@@ -45,7 +44,6 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      // Sign up with Supabase Auth
       const { user } = await signUp(email, password, {
         username,
         full_name: fullName,
@@ -72,7 +70,7 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >

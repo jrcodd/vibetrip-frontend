@@ -14,10 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { 
-  X, 
-  Camera, 
-  MapPin, 
+import {
+  X,
+  Camera,
+  MapPin,
   Calendar,
   Clock,
   DollarSign,
@@ -74,24 +74,26 @@ export default function CreateEventScreen() {
   const pickImage = async () => {
     try {
       console.log('Requesting media library permissions...');
-      
+
       // Request permissions first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       console.log('Permission status:', status);
-      
+
       if (status !== 'granted') {
         Alert.alert(
-          'Permission Required', 
+          'Permission Required',
           'Please grant camera roll permissions to upload images. You can enable this in your device settings.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => {
-              // For iOS, we can't directly open settings, but we can show instructions
-              Alert.alert(
-                'Enable Photo Access', 
-                'Go to Settings > Privacy & Security > Photos > [Your App Name] and allow access.'
-              );
-            }}
+            {
+              text: 'Open Settings', onPress: () => {
+                // For iOS, we can't directly open settings, but we can show instructions
+                Alert.alert(
+                  'Enable Photo Access',
+                  'Go to Settings > Privacy & Security > Photos > [Your App Name] and allow access.'
+                );
+              }
+            }
           ]
         );
         return;
@@ -112,7 +114,7 @@ export default function CreateEventScreen() {
         const selectedAsset = result.assets[0];
         console.log('Selected image:', selectedAsset.uri);
         setSelectedImage(selectedAsset.uri);
-        
+
         // Update form data with the image URI
         setFormData(prev => ({
           ...prev,
@@ -124,7 +126,7 @@ export default function CreateEventScreen() {
     } catch (error: any) {
       console.error('Error picking image:', error);
       Alert.alert(
-        'Image Selection Failed', 
+        'Image Selection Failed',
         `Failed to pick image: ${error.message || 'Unknown error'}. Please try again or check your permissions.`
       );
     }
@@ -133,22 +135,24 @@ export default function CreateEventScreen() {
   const takePhoto = async () => {
     try {
       console.log('Requesting camera permissions...');
-      
+
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       console.log('Camera permission status:', status);
-      
+
       if (status !== 'granted') {
         Alert.alert(
-          'Camera Permission Required', 
+          'Camera Permission Required',
           'Please grant camera permissions to take photos. You can enable this in your device settings.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => {
-              Alert.alert(
-                'Enable Camera Access', 
-                'Go to Settings > Privacy & Security > Camera > [Your App Name] and allow access.'
-              );
-            }}
+            {
+              text: 'Open Settings', onPress: () => {
+                Alert.alert(
+                  'Enable Camera Access',
+                  'Go to Settings > Privacy & Security > Camera > [Your App Name] and allow access.'
+                );
+              }
+            }
           ]
         );
         return;
@@ -178,7 +182,7 @@ export default function CreateEventScreen() {
     } catch (error: any) {
       console.error('Error taking photo:', error);
       Alert.alert(
-        'Camera Error', 
+        'Camera Error',
         `Failed to take photo: ${error.message || 'Unknown error'}. Please try again or check your permissions.`
       );
     }
@@ -239,7 +243,7 @@ export default function CreateEventScreen() {
     setIsLoading(true);
     try {
       let imageUrl = undefined;
-      
+
       // Upload image if one was selected
       if (selectedImage) {
         try {
@@ -248,10 +252,9 @@ export default function CreateEventScreen() {
           console.log('Image uploaded successfully:', imageUrl);
         } catch (uploadError) {
           console.error('Image upload failed:', uploadError);
-          // Show specific error message but continue with event creation
           Alert.alert(
-            'Image Upload Warning', 
-            `Image upload failed: ${uploadError.message || 'Unknown error'}. The event will be created without an image.`,
+            'Image Upload Warning',
+            'Image upload failed: ${uploadError || \'Unknown error\'}. The event will be created without an image.',
             [{ text: 'Continue', style: 'default' }]
           );
         }
@@ -270,19 +273,19 @@ export default function CreateEventScreen() {
 
       console.log('Creating event with data:', eventData);
       await apiClient.createEvent(eventData);
-      
+
       // Refresh activities cache to include the new event
       await refreshActivities();
-      
+
       Alert.alert(
-        'Success!', 
+        'Success!',
         imageUrl ? 'Your event has been created successfully with image!' : 'Your event has been created successfully!',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
       console.error('Error creating event:', error);
       Alert.alert(
-        'Event Creation Failed', 
+        'Event Creation Failed',
         error.message || 'Failed to create event. Please check your internet connection and try again.',
         [{ text: 'OK' }]
       );
@@ -315,8 +318,8 @@ export default function CreateEventScreen() {
           <X color="#1C1C1E" size={24} strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Event</Text>
-        <TouchableOpacity 
-          onPress={handleSubmit} 
+        <TouchableOpacity
+          onPress={handleSubmit}
           style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
           disabled={isLoading}
         >
@@ -348,7 +351,7 @@ export default function CreateEventScreen() {
         {/* Basic Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Event Details</Text>
-          
+
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
               <Type color="#8E8E93" size={20} strokeWidth={2} />
@@ -395,7 +398,7 @@ export default function CreateEventScreen() {
         {/* Date and Time */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Date & Time</Text>
-          
+
           <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateTimeButton}>
             <View style={styles.inputIcon}>
               <Calendar color="#8E8E93" size={20} strokeWidth={2} />
@@ -462,7 +465,7 @@ export default function CreateEventScreen() {
         {/* Additional Options */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Additional Options</Text>
-          
+
           <View style={styles.inputGroup}>
             <View style={styles.inputIcon}>
               <DollarSign color="#8E8E93" size={20} strokeWidth={2} />

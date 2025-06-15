@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, Compass, Calendar, Users, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
+import { Armchair as Home, Compass, Calendar, Users, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
 import { Platform, StyleSheet } from 'react-native';
 
 export default function TabLayout() {

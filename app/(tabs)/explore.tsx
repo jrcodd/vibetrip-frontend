@@ -23,8 +23,6 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
-const { width } = Dimensions.get('window');
-
 interface Place {
   id: string;
   name: string;
@@ -151,13 +149,13 @@ const PlaceCard = ({ place, index }: { place: Place; index: number }) => {
       <TouchableOpacity activeOpacity={0.95}>
         <View style={styles.placeImageContainer}>
           <Image source={{ uri: place.image }} style={styles.placeImage} />
-          
+
           {place.isHidden && (
             <View style={styles.hiddenBadge}>
               <Text style={styles.hiddenBadgeText}>Hidden Gem 💎</Text>
             </View>
           )}
-          
+
           <TouchableOpacity
             style={styles.saveButton}
             onPress={() => setIsSaved(!isSaved)}

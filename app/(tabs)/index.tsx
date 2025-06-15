@@ -7,7 +7,6 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  Platform,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,21 +22,16 @@ import {
   Award,
   Camera,
 } from 'lucide-react-native';
-import Animated, { 
-  FadeInDown, 
-  FadeInRight, 
+import Animated, {
+  FadeInDown,
+  FadeInRight,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  interpolate,
 } from 'react-native-reanimated';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import type { Post } from '@/lib/supabase';
-
-const { width } = Dimensions.get('window');
-
-
 
 const FeedCard = ({ item, index }: { item: Post; index: number }) => {
   const scale = useSharedValue(1);
@@ -87,14 +81,14 @@ const FeedCard = ({ item, index }: { item: Post; index: number }) => {
             colors={['transparent', 'rgba(0,0,0,0.6)']}
             style={styles.imageGradient}
           />
-          
+
           {item.post_type === 'challenge' && (
             <View style={styles.badgeContainer}>
               <Award color="#FFD700" size={16} strokeWidth={2} />
               <Text style={styles.badgeText}>Challenge</Text>
             </View>
           )}
-          
+
           <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
             <Bookmark
               color={isSaved ? "#007AFF" : "#FFFFFF"}
@@ -116,26 +110,6 @@ const FeedCard = ({ item, index }: { item: Post; index: number }) => {
           </View>
 
           <Text style={styles.cardDescription}>{item.content}</Text>
-
-          {item.places && (
-            <View style={styles.locationContainer}>
-              <MapPin color="#8E8E93" size={14} strokeWidth={2} />
-              <Text style={styles.locationText}>{item.places.location}</Text>
-              {item.places.rating && (
-                <View style={styles.ratingContainer}>
-                  <Star color="#FFD700" fill="#FFD700" size={14} strokeWidth={2} />
-                  <Text style={styles.ratingText}>{item.places.rating}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {item.profiles && (
-            <View style={styles.authorContainer}>
-              <Image source={{ uri: item.profiles.avatar_url || 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150' }} style={styles.authorAvatar} />
-              <Text style={styles.authorName}>{item.profiles.full_name || item.profiles.username}</Text>
-            </View>
-          )}
 
           <View style={styles.cardActions}>
             <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
@@ -197,7 +171,7 @@ export default function HomeScreen() {
   };
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -222,12 +196,12 @@ export default function HomeScreen() {
             <Camera color="#007AFF" size={28} strokeWidth={2} />
             <Text style={styles.quickActionText}>Share Moment</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.quickActionCard}>
             <MapPin color="#34C759" size={28} strokeWidth={2} />
             <Text style={styles.quickActionText}>Nearby</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.quickActionCard}>
             <Award color="#FFD700" size={28} strokeWidth={2} />
             <Text style={styles.quickActionText}>Challenges</Text>

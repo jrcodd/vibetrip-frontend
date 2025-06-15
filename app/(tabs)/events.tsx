@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  Calendar,
   MapPin,
   Clock,
   Users,
@@ -28,9 +27,6 @@ import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { apiClient } from '../../lib/api';
 import { useAuth } from '@/hooks/useAuth';
-import type { Event } from '../../lib/supabase';
-
-const { width } = Dimensions.get('window');
 
 interface EventCardData {
   id: string;
@@ -98,7 +94,6 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
       newStatus = 'interested';
     }
 
-    // Optimistic update
     const prevGoing = isGoing;
     const prevInterested = isInterested;
 
@@ -117,7 +112,6 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
       await apiClient.rsvpToEvent(event.id, newStatus);
       onRsvpUpdate(event.id, newStatus, { isGoing: prevGoing, isInterested: prevInterested });
     } catch (error) {
-      // Revert optimistic update on error
       setIsGoing(prevGoing);
       setIsInterested(prevInterested);
       Alert.alert('Error', 'Failed to update RSVP. Please try again.');
@@ -219,7 +213,7 @@ const EventCard = ({ event, index, onRsvpUpdate }: { event: EventCardData; index
 };
 
 export default function EventsScreen() {
-  const { activities, activitiesLoading, loadActivities, refreshActivities, getCachedEvents, updateCachedEventRsvp } = useAuth();
+  const { activitiesLoading, loadActivities, refreshActivities, getCachedEvents, updateCachedEventRsvp } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [filteredEvents, setFilteredEvents] = useState<EventCardData[]>([]);
   const [events, setEvents] = useState<EventCardData[]>([]);
@@ -227,7 +221,6 @@ export default function EventsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Get events from cached activities using helper method
   const cachedEvents = getCachedEvents();
 
   const handleCategorySelect = (categoryId: string) => {
@@ -253,12 +246,9 @@ export default function EventsScreen() {
       });
 
       if (pastEvents.length > 0) {
-        console.log(`Found ${pastEvents.length} past events, cleaning up...`);
 
         try {
-          // Use bulk cleanup endpoint to delete all past events
-          const result = await apiClient.deletePastEvents();
-          console.log(`Cleanup result: ${result.message}`);
+          await apiClient.deletePastEvents();
         } catch (error) {
           console.error('Failed to cleanup past events:', error);
         }
@@ -274,7 +264,6 @@ export default function EventsScreen() {
   const loadEvents = async (forceRefresh = false) => {
     // Use cached data if available and not forcing refresh
     if (!forceRefresh && cachedEvents.length > 0) {
-      console.log('Using cached events data');
       const transformedEvents = transformCachedEvents(cachedEvents);
 
       // Check for and delete past events after sorting
@@ -295,21 +284,15 @@ export default function EventsScreen() {
         return;
       }
 
-      console.log('Fetching events from API with category:', selectedCategory === 'all' ? 'all' : selectedCategory);
       const result = await apiClient.getEvents(selectedCategory === 'all' ? undefined : selectedCategory);
-      console.log('API result:', result);
 
       if (result && result.events) {
-        // Transform database events to card data format (events already sorted by database)
         const transformedEvents: EventCardData[] = result.events.map((event: any) => {
-          console.log('Event data:', JSON.stringify(event, null, 2)); // Debug log
           const eventDate = new Date(event.event_date);
           const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-          // Handle joined profile data - could be nested under 'profiles' key
           const organizerProfile = event.profiles || event.organizer_profile;
-          console.log('Organizer profile:', organizerProfile);
 
           return {
             id: event.id,
@@ -333,7 +316,6 @@ export default function EventsScreen() {
           };
         });
 
-        // Check for and delete past events (no sorting needed, events are pre-sorted by database)
         const futureEvents = await cleanupPastEvents(transformedEvents);
 
         setEvents(futureEvents);
@@ -348,12 +330,9 @@ export default function EventsScreen() {
   };
 
   const transformCachedEvents = (cachedEvents: any[]): EventCardData[] => {
-    // Cached events should already be sorted, no need to sort again
     return cachedEvents.map((activity: any) => {
-      // Extract the event ID from the activity ID (format: 'event-{id}')
       const eventId = activity.id.replace('event-', '');
 
-      // Format date and time from cached data
       const eventDate = activity.eventDate ? new Date(activity.eventDate) : new Date();
       const dateStr = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const timeStr = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -392,9 +371,9 @@ export default function EventsScreen() {
 
       // Calculate attendee count change
       if (wasGoing && !willBeGoing) {
-        attendeeChange = -1; // Was going, now not going
+        attendeeChange = -1;
       } else if (!wasGoing && willBeGoing) {
-        attendeeChange = 1; // Wasn't going, now going
+        attendeeChange = 1;
       }
 
       return {
@@ -405,18 +384,15 @@ export default function EventsScreen() {
       };
     };
 
-    // Update local state
     setEvents(prevEvents => prevEvents.map(updateEvent));
     setFilteredEvents(prevEvents => prevEvents.map(updateEvent));
 
-    // Update cached data in auth context
     updateCachedEventRsvp(eventId, status as 'going' | 'interested' | 'not_going');
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      // Refresh both activities and events data
       await refreshActivities();
       await loadEvents(true);
     } catch (error) {
