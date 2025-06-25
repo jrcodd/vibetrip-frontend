@@ -31,7 +31,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
-import { router } from 'expo-router';
 import type { Post } from '@/lib/supabase';
 
 const FeedCard = ({ item, index }: { item: Post; index: number }) => {
@@ -193,7 +192,7 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <Animated.View entering={FadeInDown.delay(200)} style={styles.quickActions}>
-<TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/create-post')}>
+          <TouchableOpacity style={styles.quickActionCard}>
             <Camera color="#007AFF" size={28} strokeWidth={2} />
             <Text style={styles.quickActionText}>Share Moment</Text>
           </TouchableOpacity>
